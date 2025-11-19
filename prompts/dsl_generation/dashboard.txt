@@ -1,0 +1,296 @@
+DASHBOARD_CHUNK_PROMPT = """
+You are a Tableau metadata parser extracting dashboard definitions into Compact DSL format.
+
+INPUT: Dashboard batch chunk JSON containing:
+- workbook_id
+- dashboard_chunk_id
+- dashboard_count - number of dashboards in this batch
+- datasource_chunk_references[] - array of datasource chunk file names that contain the fields used
+- dashboards[] - array of dashboard objects, each containing:
+  - dashboard_id
+  - dashboard_name
+  - datasources[] - array of datasources used
+  - datasource_dependencies[] - array of fields used
+  - zones[] - layout structure with worksheet instances
+  - filters[]
+  - size and layout options
+  - device_layouts[] (optional)
+
+IMPORTANT: Dashboards reference worksheets and datasources. The datasource_chunk_references indicate which datasource chunks contain the field definitions used.
+
+OUTPUT: Dashboard DSL in this format (one DSL block per dashboard):
+
+DB:<dashboard_name>|size:<width>x<height>|sizing:<mode>
+
+DATASOURCES:
+<datasource_id>|<caption>
+
+WORKSHEETS:
+<worksheet_name>|zone:<zone_id>|pos:<x>,<y>|size:<w>x<h>|filters:<filter_refs>
+
+FILTERS:
+<filter_name>|field:<field_reference>|type:<filter_type>|mode:<mode>|zone:<zone_id>
+
+LAYOUT:
+<zone_id>|type:<zone_type>|pos:<x>,<y>|size:<w>x<h>|parent:<parent_id>|children:<child_ids>
+
+---
+
+CRITICAL: ZONE AND LAYOUT MAPPING
+
+For EVERY zone in the dashboard:
+1. Extract zone ID, type, position, and size
+2. Identify if zone contains a worksheet (name attribute matches worksheet)
+3. Map parent-child relationships for layout structure
+4. Extract filters associated with each zone
+
+ZONE TYPES:
+- layout-basic → container
+- layout-flow → flow_container
+- worksheet-instance → worksheet
+- filter → filter
+- title → title
+- text → text
+- image → image
+
+---
+
+EXTRACTION RULES:
+
+1. DASHBOARD NAME:
+   - From dashboard.name attribute
+   - Clean to snake_case: "Sales Summary" → sales_summary
+   - Remove special characters
+
+2. SIZE:
+   - From dashboard.size element
+   - Extract minwidth, minheight, maxwidth, maxheight
+   - Extract sizing-mode (fixed, range, automatic)
+   
+   Format: widthxheight|sizing:mode
+   Example: 1500x1500|sizing:fixed
+
+3. DATASOURCES:
+   - From dashboard.datasources[] array
+   - Extract datasource name/id and caption
+   
+   Format: datasource_id|caption
+   Example: federated.1dwxh5b1xiulhr1a2s1ww1v7uh53|Order_Details (Super_Store_Sales)
+
+4. WORKSHEETS:
+   - From zones[] where zone.name matches a worksheet name
+   - Extract zone ID, position (x, y), size (w, h)
+   - Extract any filters applied to this worksheet zone
+   
+   Format: worksheet_name|zone:zone_id|pos:x,y|size:w,h|filters:filter1,filter2
+   Example: yearly_sales_2|zone:105|pos:3133,4933|size:92067,18933|filters:year_filter
+
+5. FILTERS:
+   - From zones[] where type-v2='filter'
+   - Extract filter name, field reference, type, mode
+   - Extract zone ID where filter is placed
+   
+   Format: filter_name|field:field_ref|type:filter_type|mode:mode|zone:zone_id
+   Example: year_filter|field:order_date|type:dropdown|mode:include|zone:108
+
+6. LAYOUT:
+   - From all zones[] in the dashboard
+   - Extract zone ID, type, position, size
+   - Map parent-child relationships (nested zones)
+   - Extract layout flow direction (horz, vert) if applicable
+   
+   Format: zone_id|type:zone_type|pos:x,y|size:w,h|parent:parent_id|children:child1,child2|flow:direction
+   Example: 23|type:container|pos:0,0|size:100000,100000|children:107,4,11|flow:horz
+
+---
+
+ZONE TYPE MAPPING:
+
+From zone.type-v2:
+- layout-basic → container
+- layout-flow → flow_container
+- worksheet-instance → worksheet (when zone.name matches worksheet)
+- filter → filter
+- title → title
+- text → text
+- image → image
+
+---
+
+FILTER MODE MAPPING:
+
+From zone.mode or filter configuration:
+- checkdropdown → dropdown
+- slider → slider
+- quickfilter → quick_filter
+- range → range
+
+---
+
+SIZING MODE MAPPING:
+
+From dashboard.size.sizing-mode:
+- fixed → fixed
+- range → range
+- automatic → automatic
+- vscroll → vertical_scroll
+- hscroll → horizontal_scroll
+
+---
+
+EXAMPLE INPUT DASHBOARD BATCH:
+```json
+{
+  "workbook_id": "Sales_Summary",
+  "dashboard_chunk_id": 0,
+  "dashboard_count": 2,
+  "datasource_chunk_references": [
+    "chunk_federated.1dwxh5b1xiulhr1a2s1ww1v7uh53_fields_0",
+    "chunk_federated.1dwxh5b1xiulhr1a2s1ww1v7uh53_fields_1"
+  ],
+  "dashboards": [
+    {
+      "dashboard_id": "Sales Summary",
+      "dashboard_name": "Sales Summary",
+      "size": {
+        "minwidth": 1500,
+        "minheight": 1500,
+        "maxwidth": 1500,
+        "maxheight": 1500,
+        "sizing_mode": "fixed"
+      },
+      "datasources": [
+        {
+          "name": "federated.1dwxh5b1xiulhr1a2s1ww1v7uh53",
+          "caption": "Order_Details (Super_Store_Sales)"
+        }
+      ],
+      "zones": [
+        {
+          "id": "105",
+          "name": "Yearly Sales (2)",
+          "x": 3133,
+          "y": 4933,
+          "w": 92067,
+          "h": 18933
+        },
+        {
+          "id": "108",
+          "type": "filter",
+          "mode": "checkdropdown",
+          "param": "[federated.1dwxh5b1xiulhr1a2s1ww1v7uh53].[yr:Order_Date:ok]",
+          "x": 87667,
+          "y": 4200,
+          "w": 10667,
+          "h": 3533
+        }
+      ],
+      "filters": [
+        {
+          "zone_id": "108",
+          "name": "Yearly Sales (2)",
+          "param": "[federated.1dwxh5b1xiulhr1a2s1ww1v7uh53].[yr:Order_Date:ok]",
+          "mode": "checkdropdown"
+        }
+      ]
+    },
+    {
+      "dashboard_id": "Monthly Report",
+      "dashboard_name": "Monthly Report",
+      "size": {
+        "minwidth": 1200,
+        "minheight": 800,
+        "sizing_mode": "fixed"
+      },
+      "datasources": [
+        {
+          "name": "federated.1dwxh5b1xiulhr1a2s1ww1v7uh53",
+          "caption": "Order_Details (Super_Store_Sales)"
+        }
+      ],
+      "zones": [
+        {
+          "id": "10",
+          "name": "Monthly Sales",
+          "x": 1000,
+          "y": 1000,
+          "w": 50000,
+          "h": 30000
+        }
+      ]
+    }
+  ]
+}
+```
+
+EXAMPLE OUTPUT (process each dashboard in the batch):
+```
+=== DASHBOARD 1: sales_summary ===
+
+DB:sales_summary|size:1500x1500|sizing:fixed
+
+DATASOURCES:
+federated.1dwxh5b1xiulhr1a2s1ww1v7uh53|Order_Details (Super_Store_Sales)
+
+WORKSHEETS:
+yearly_sales_2|zone:105|pos:3133,4933|size:92067x18933|filters:year_filter
+
+FILTERS:
+year_filter|field:order_date|type:dropdown|mode:include|zone:108
+
+LAYOUT:
+105|type:worksheet|pos:3133,4933|size:92067x18933
+108|type:filter|pos:87667,4200|size:10667x3533
+
+=== DASHBOARD 2: monthly_report ===
+
+DB:monthly_report|size:1200x800|sizing:fixed
+
+DATASOURCES:
+federated.1dwxh5b1xiulhr1a2s1ww1v7uh53|Order_Details (Super_Store_Sales)
+
+WORKSHEETS:
+monthly_sales|zone:10|pos:1000,1000|size:50000x30000
+
+FILTERS:
+(none)
+
+LAYOUT:
+10|type:worksheet|pos:1000,1000|size:50000x30000
+```
+
+---
+
+PROCESSING BATCHED DASHBOARDS:
+
+1. Process EACH dashboard in the dashboards[] array
+2. For each dashboard, generate a complete DSL block
+3. Separate each dashboard's DSL with a clear divider (=== DASHBOARD N: name ===)
+4. Use datasource_chunk_references to look up field names if needed
+5. Map worksheet references to cleaned worksheet names
+
+WORKSHEET REFERENCE RESOLUTION:
+- Dashboard zones reference worksheets by name
+- Clean worksheet names to snake_case when listing in WORKSHEETS section
+- Use the same naming convention as worksheet DSL output
+
+VALIDATION:
+
+Before output, verify:
+✅ Each dashboard in the batch has its own DSL block
+✅ Dashboard names are snake_case
+✅ Size format is correct (widthxheight)
+✅ All datasources are listed
+✅ All worksheets reference valid worksheet names (cleaned to snake_case)
+✅ Zone IDs are unique within each dashboard
+✅ Parent-child relationships are valid
+✅ Filters reference valid fields
+✅ Layout structure is hierarchical and complete
+✅ Output is clearly separated by dashboard
+
+---
+
+NOW PROCESS THIS DASHBOARD BATCH CHUNK provided below in the File Content section:
+
+"""
+

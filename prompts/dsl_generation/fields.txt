@@ -1,0 +1,228 @@
+FIELD_CHUNK_PROMPT = """
+You are a Tableau metadata parser extracting field definitions into Compact DSL format.
+
+INPUT: Field chunk JSON containing:
+- datasource_id
+- chunk_id
+- fields[] - array of paired metadata+column objects
+
+OUTPUT: Field DSL in this format:
+
+DIMS:
+<field_name>|table:"<source_table>"|db:"<database_column>"|label:"<Display Label>"|<type>|<attributes>
+
+MEASURES:
+<field_name>|table:"<source_table>"|db:"<database_column>"|label:"<Display Label>"|<formula>|<format>
+
+CALCS:
+<field_name>|table:"<inferred_table>"|inferred:true|label:"<Display Label>"|<type>|<formula_with_cleaned_refs>|ref_tables:<tables>
+
+---
+
+CRITICAL: FOUR-PART FIELD MAPPING
+
+For EVERY field, extract:
+1. **field_name** - Cleaned snake_case name for DSL
+2. **table:"source_table"** - From metadata.parent_name (which table this field comes from)
+3. **db:"column_name"** - From metadata.remote_name (actual database column name)
+4. **label:"Display Label"** - From column.caption (UI display name, if different from field_name)
+
+---
+
+FIELD NAMING ALGORITHM:
+
+From each field object:
+
+METADATA PATH (if exists):
+- metadata.local_name → "[Order Date]"
+- metadata.remote_name → "Order_Date" (THIS IS db:"")
+- metadata.parent_name → "[fact_orders]" (THIS IS table:"", clean it)
+
+COLUMN PATH:
+- column.name → "[Order Date]"
+- column.caption → "Date Ordered" (THIS IS label:"")
+- column.datatype → "date"
+- column.role → "dimension" or "measure"
+
+CREATE field_name:
+1. Take metadata.local_name OR column.name
+2. Remove brackets: [Order Date] → Order Date
+3. Lowercase: Order Date → order date
+4. Replace spaces with underscore: order date → order_date
+5. Remove special chars
+
+CREATE table name:
+1. Take metadata.parent_name → "[FCT_METRICHOMEPAGEALL_FAC_DAY]"
+2. Remove brackets: FCT_METRICHOMEPAGEALL_FAC_DAY
+3. Lowercase: fct_metrichomepageall_fac_day
+
+---
+
+FIELD CLASSIFICATION:
+
+1. BASE DIMENSIONS (has metadata + column, no calculation):
+   - metadata exists
+   - column exists
+   - column.calculation is null
+   - role = 'dimension'
+   
+   Output: field_name|table:"parent_name"|db:"remote_name"|label:"caption"|type
+
+2. BASE MEASURES (has metadata + column, no calculation):
+   - metadata exists
+   - column exists
+   - column.calculation is null
+   - role = 'measure'
+   
+   Output: field_name|table:"parent_name"|db:"remote_name"|label:"caption"|type
+
+3. CALCULATED FIELDS (column only, has calculation):
+   - metadata is null (no source table)
+   - column.calculation exists
+   - Extract formula from column.calculation.formula
+   
+   TABLE INFERENCE (from enriched chunk data):
+   - Check if field has 'inferred_table' (added by preprocessing)
+   - If present: use inferred_table as primary table
+   - If ref_tables exists and has multiple tables: include ref_tables
+   - If inferred_table is null: analyze formula recursively (fallback)
+   
+   Output format:
+   - Single table: field_name|table:"inferred_table"|inferred:true|label:"caption"|type|formula
+   - Multi-table: field_name|table:"inferred_table"|inferred:true|label:"caption"|type|formula|ref_tables:table1,table2
+   
+   Example single table:
+   revenue_per_order|table:"fct_orders"|inferred:true|label:"Revenue per Order"|number|formula:sum(revenue)/count(orders)
+   
+   Example multi-table:
+   revenue_per_customer|table:"fct_orders"|inferred:true|label:"Revenue per Customer"|number|formula:sum(revenue)/countd(dim_customers.customer_id)|ref_tables:fct_orders,dim_customers
+
+4. PARAMETERS (column only, has param-domain-type):
+   - metadata is null
+   - column has 'param-domain-type'
+   
+   Output: field_name|param|type|values:[...]
+   (NO table:"" because parameters are global)
+
+---
+
+TYPE MAPPING:
+
+From column.datatype:
+- string, text → string
+- integer, real, number → number
+- date, datetime → date
+- boolean → yesno
+
+---
+
+FORMULA NORMALIZATION:
+
+For calculated fields, normalize field references:
+- Original: SUM([Order Date])
+- Find [Order Date] → order_date
+- Output: SUM(order_date)
+
+Build internal mapping of all fields in this chunk:
+[Tableau Name] → cleaned_field_name
+
+Then replace all [field] references in formulas.
+
+---
+
+EXAMPLE INPUT FIELD:
+```json
+{
+  "field_name": "[FacilityCode]",
+  "metadata": {
+    "local_name": "[FacilityCode]",
+    "remote_name": "FacilityCode",
+    "remote_type": "130",
+    "parent_name": "[FCT_METRICHOMEPAGEALL_FAC_DAY]"
+  },
+  "column": {
+    "name": "[FacilityCode]",
+    "caption": "Facility Code",
+    "datatype": "string",
+    "role": "dimension"
+  }
+}
+```
+
+EXAMPLE OUTPUT:
+```
+facility_code|table:"fct_metrichomepageall_fac_day"|db:"FacilityCode"|label:"Facility Code"|string
+```
+
+---
+
+EXAMPLE BASE MEASURE:
+```json
+{
+  "field_name": "[Sales]",
+  "metadata": {
+    "local_name": "[Sales]",
+    "remote_name": "Sales",
+    "parent_name": "[fact_orders]"
+  },
+  "column": {
+    "name": "[Sales]",
+    "caption": "Sales Amount",
+    "datatype": "real",
+    "role": "measure"
+  }
+}
+```
+
+EXAMPLE OUTPUT:
+```
+sales|table:"fact_orders"|db:"Sales"|label:"Sales Amount"|number
+```
+
+---
+
+EXAMPLE CALCULATED FIELD (with inferred table):
+```json
+{
+  "field_name": "[Revenue]",
+  "metadata": null,
+  "column": {
+    "name": "[Revenue]",
+    "caption": "Total Revenue",
+    "role": "measure",
+    "calculation": {
+      "formula": "SUM([Sales])"
+    }
+  },
+  "inferred_table": "fct_orders",
+  "ref_tables": "fct_orders",
+  "referenced_fields": ["[Sales]"],
+  "inferred": true
+}
+```
+
+EXAMPLE OUTPUT:
+```
+total_revenue|table:"fct_orders"|inferred:true|label:"Total Revenue"|measure|SUM(sales)
+```
+
+---
+
+VALIDATION:
+
+Before output, verify:
+✅ All field_names are snake_case
+✅ All table:"" values come from metadata.parent_name (cleaned) OR inferred_table (for calculated fields)
+✅ All db:"" values come from metadata.remote_name
+✅ All label:"" values come from column.caption (only if different)
+✅ All formulas use cleaned field references (no brackets)
+✅ Types are correctly mapped
+✅ Calculated fields with inferred_table have table assignment
+✅ Multi-table calcs include ref_tables
+✅ Base fields always have table:""
+
+---
+
+NOW PROCESS THIS FIELD CHUNK provided below in the File Content section:
+
+"""

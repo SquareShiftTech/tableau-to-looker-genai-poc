@@ -1,0 +1,66 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Phase 1: DSL Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workflow.test_phase1",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "GOOGLE_CLOUD_PROJECT": "tableau-to-looker-migration"
+            },
+            "args": [],
+            "stopOnEntry": false
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "Debug Phase 2: LookML Generation",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workflow.test_phase2",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "GOOGLE_CLOUD_PROJECT": "tableau-to-looker-migration"
+            },
+            "args": [],
+            "stopOnEntry": false
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "Debug Phase 1 (Direct run_phase1)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workflow.phase1_dsl_generation",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "GOOGLE_CLOUD_PROJECT": "tableau-to-looker-migration"
+            },
+            "args": [],
+            "stopOnEntry": false
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}"
+        },
+        {
+            "name": "Debug Phase 2 (Direct run_phase2)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workflow.phase2_lookml_generation",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "GOOGLE_CLOUD_PROJECT": "tableau-to-looker-migration"
+            },
+            "args": [],
+            "stopOnEntry": false
+            "cwd": "${workspaceFolder}",
+            "python": "${command:python.interpreterPath}"
+        }
+    ]
+}
+

@@ -1,0 +1,47 @@
+<datasource caption='FCT_MetricHomepage_FAC_MONTH+ (FPA_Tableau)' inline='true' name='federated.09t851k1wb86c512yov0h1usonym' version='18.1'>
+      <connection class='federated'>
+        <named-connections>
+          <named-connection caption='BigQuery' name='bigquery.1vuqcf513hub9n14kvlxw1l11nac'>
+            <connection CATALOG='tableau-to-looker-migration' EXECCATALOG='tableau-to-looker-migration' authentication='oauth' bq-dataset-fetch-rows='' bq-fetch-rows='' bq-fetch-tasks='' bq-large-fetch-rows='' bq-project-fetch-rows='' bq-response-rows='' class='bigquery' connection-dialect='google-sql' project='tableau-to-looker-migration' schema='Tableau_To_BigQuery' server-oauth='' username='boopathi.jothi@squareshift.co' workgroup-auth-mode='prompt' />
+          </named-connection>
+        </named-connections>
+        <_.fcp.ObjectModelEncapsulateLegacy.false...relation join='left' type='join'>
+          <clause type='join'>
+            <expression op='='>
+              <expression op='[FCT_METRICHOMEPAGEALL_FAC_DAY].[FacilityCode]' />
+              <expression op='[DIM_LOCATION_HBUOP].[FacilityCode]' />
+            </expression>
+          </clause>
+          <relation connection='bigquery.1vuqcf513hub9n14kvlxw1l11nac' name='FCT_METRICHOMEPAGEALL_FAC_DAY' table='[tableau-to-looker-migration.Tableau_To_BigQuery].[FCT_METRICHOMEPAGEALL_FAC_DAY]' type='table' />
+          <relation connection='bigquery.1vuqcf513hub9n14kvlxw1l11nac' name='DIM_LOCATION_HBUOP' table='[tableau-to-looker-migration.Tableau_To_BigQuery].[DIM_LOCATION_HBUOP]' type='table' />
+        </_.fcp.ObjectModelEncapsulateLegacy.false...relation>
+        <_.fcp.ObjectModelEncapsulateLegacy.true...relation join='left' type='join'>
+          <clause type='join'>
+            <expression op='='>
+              <expression op='[FCT_METRICHOMEPAGEALL_FAC_DAY].[FacilityCode]' />
+              <expression op='[DIM_LOCATION_HBUOP].[FacilityCode]' />
+            </expression>
+          </clause>
+          <relation connection='bigquery.1vuqcf513hub9n14kvlxw1l11nac' name='FCT_METRICHOMEPAGEALL_FAC_DAY' table='[tableau-to-looker-migration.Tableau_To_BigQuery].[FCT_METRICHOMEPAGEALL_FAC_DAY]' type='table' />
+          <relation connection='bigquery.1vuqcf513hub9n14kvlxw1l11nac' name='DIM_LOCATION_HBUOP' table='[tableau-to-looker-migration.Tableau_To_BigQuery].[DIM_LOCATION_HBUOP]' type='table' />
+        </_.fcp.ObjectModelEncapsulateLegacy.true...relation>
+        <cols>
+          <map key='[AGGREGATION]' value='[FCT_METRICHOMEPAGEALL_FAC_DAY].[AGGREGATION]' />
+          <map key='[AddedtoScheduleTop20]' value='[FCT_METRICHOMEPAGEALL_FAC_DAY].[AddedtoScheduleTop20]' />
+        </cols>
+        <refresh increment-key='' incremental-updates='false' />
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>FacilityCode</remote-name>
+            <remote-type>130</remote-type>
+            <local-name>[FacilityCode]</local-name>
+            <parent-name>[FCT_METRICHOMEPAGEALL_FAC_DAY]</parent-name>
+            <remote-alias>FacilityCode</remote-alias>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <_.fcp.ObjectModelEncapsulateLegacy.true...object-id>[FCT_METRICHOMEPAGE_FAC_MONTH_B26337F5E32D4E24B60538BC7B488EE8]</_.fcp.ObjectModelEncapsulateLegacy.true...object-id>
+          </metadata-record>
+       </metadata-records>
+      </connection>
+    

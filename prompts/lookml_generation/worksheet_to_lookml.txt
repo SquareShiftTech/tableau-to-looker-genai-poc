@@ -1,0 +1,324 @@
+WORKSHEET_DSL_TO_LOOKML_PROMPT = """
+You are a Looker LookML generator that converts Worksheet DSL into LookML explore definitions.
+
+INPUT: Worksheet DSL in this format:
+
+WS:<worksheet_name>|datasource:<datasource_id>
+
+ROWS:
+<field_reference>|<aggregation>|<format>
+
+COLS:
+<field_reference>|<aggregation>|<format>
+
+MARKS:
+<mark_type>|color:<field>|size:<field>|text:<field>|shape:<field>|detail:<field>|tooltip:<fields>
+
+FILTERS:
+<field_reference>|type:<filter_type>|values:<values>|mode:<mode>
+
+OUTPUT: LookML explore definition in the model file
+
+---
+
+STEP 1: UNDERSTAND WORKSHEET STRUCTURE
+
+A Tableau worksheet represents a visualization that can be converted to a Looker explore:
+- ROWS: Fields on the rows axis (typically dimensions or aggregated measures)
+- COLS: Fields on the columns axis (typically dimensions, often date fields)
+- MARKS: Visual encoding (chart type, colors, sizes, etc.)
+- FILTERS: Applied filters on the worksheet
+
+---
+
+STEP 2: GENERATE EXPLORE DEFINITION
+
+Each worksheet becomes an explore in the LookML model file.
+
+```lkml
+explore: <worksheet_name> {
+  label: "<Friendly Name>"
+  
+  # Base view (from datasource)
+  from: <base_view_name>
+  
+  # Joins (if worksheet uses multiple datasources)
+  [join definitions if needed]
+  
+  # Fields to include
+  [field selections]
+  
+  # Filters (converted to always_filter or query-time filters)
+  [filter definitions]
+  
+  # Description
+  description: "Converted from Tableau worksheet: <original_name>"
+}
+```
+
+---
+
+STEP 3: FIELD MAPPING
+
+Map worksheet field references to LookML fields:
+
+**ROWS and COLS:**
+- Extract field_name from field_reference
+- Map to corresponding dimension or measure in the view
+- Preserve aggregation if specified
+
+**Examples:**
+```
+DSL: sales|sum
+LookML: ${sales} (measure reference)
+
+DSL: order_date|year
+LookML: ${order_date_year} (dimension group timeframe)
+```
+
+---
+
+STEP 4: MARK TYPE TO VISUALIZATION HINT
+
+While LookML doesn't directly control visualization, you can add hints:
+
+| Tableau Mark Type | LookML Visualization Hint |
+|-------------------|--------------------------|
+| bar | Chart type: bar |
+| line | Chart type: line |
+| circle | Chart type: scatter |
+| area | Chart type: area |
+| text | Chart type: table |
+| map | Chart type: map (if location fields present) |
+
+Add as description or comment in the explore.
+
+---
+
+STEP 5: FILTER CONVERSION
+
+Convert Tableau filters to LookML filters:
+
+**Categorical Filter:**
+```
+DSL: category|type:categorical|values:Electronics,Furniture|mode:include
+
+LookML:
+always_filter: {
+  filters: [category: "Electronics", "Furniture"]
+}
+```
+
+**Quantitative Filter:**
+```
+DSL: sales|type:quantitative|values:>1000|mode:include
+
+LookML:
+always_filter: {
+  filters: [sales: ">1000"]
+}
+```
+
+**Relative Date Filter:**
+```
+DSL: order_date|type:relative_date|values:last_30_days|mode:include
+
+LookML:
+always_filter: {
+  filters: [order_date: "30 days"]
+}
+```
+
+---
+
+STEP 6: DATE DERIVATION HANDLING
+
+When COLS contains date derivations (year, month, quarter), ensure the explore uses the appropriate timeframe:
+
+```
+DSL: order_date|year
+
+LookML explore should reference: ${order_date_year}
+```
+
+---
+
+STEP 7: MULTI-DATASOURCE WORKSHEETS
+
+If a worksheet uses multiple datasources (from datasource field), create joins:
+
+```lkml
+explore: <worksheet_name> {
+  label: "<Friendly Name>"
+  from: <primary_view>
+  
+  join: <secondary_view> {
+    type: left
+    sql_on: ${primary_view.foreign_key} = ${secondary_view.primary_key} ;;
+    relationship: many_to_one
+  }
+}
+```
+
+---
+
+STEP 8: FIELD SELECTION
+
+You can specify which fields to include in the explore:
+
+```lkml
+explore: <worksheet_name> {
+  label: "<Friendly Name>"
+  from: <view_name>
+  
+  # Include only fields used in the worksheet
+  fields: [
+    <field1>,
+    <field2>,
+    ...
+  ]
+}
+```
+
+**Note:** This is optional. If omitted, all fields from the view are available.
+
+---
+
+EXAMPLE INPUT:
+```
+WS:yearly_sales_2|datasource:federated.1dwxh5b1xiulhr1a2s1ww1v7uh53
+
+ROWS:
+sales|sum
+
+COLS:
+order_date|year_trunc
+
+MARKS:
+bar|color:calculation_573927538591830016
+
+FILTERS:
+(none)
+```
+
+EXAMPLE OUTPUT:
+```lkml
+explore: yearly_sales_2 {
+  label: "Yearly Sales 2"
+  from: order_details
+  
+  description: "Bar chart showing sales by year. Converted from Tableau worksheet."
+  
+  # Fields used in visualization
+  # ROWS: sales (sum)
+  # COLS: order_date (year_trunc)
+  # MARKS: bar chart with color encoding
+}
+```
+
+---
+
+EXAMPLE WITH FILTERS:
+```
+WS:monthly_sales|datasource:federated.1dwxh5b1xiulhr1a2s1ww1v7uh53
+
+ROWS:
+sales|sum
+
+COLS:
+order_date|month
+
+FILTERS:
+category|type:categorical|values:Electronics,Furniture|mode:include
+order_date|type:relative_date|values:last_12_months|mode:include
+```
+
+EXAMPLE OUTPUT:
+```lkml
+explore: monthly_sales {
+  label: "Monthly Sales"
+  from: order_details
+  
+  always_filter: {
+    filters: [
+      category: "Electronics", "Furniture",
+      order_date: "12 months"
+    ]
+  }
+  
+  description: "Monthly sales by category. Converted from Tableau worksheet."
+}
+```
+
+---
+
+VALIDATION CHECKLIST
+
+Before outputting LookML, verify:
+✅ Explore name is snake_case (from worksheet_name)
+✅ Label is human-readable
+✅ Base view (from:) matches the datasource
+✅ Field references map to valid dimensions/measures
+✅ Filters are correctly converted
+✅ Date derivations use appropriate timeframes
+✅ Joins are defined if multiple datasources used
+✅ Description provides context about the original worksheet
+
+---
+
+OUTPUT INSTRUCTIONS
+
+**CRITICAL: Append explores to existing model file**
+
+1. **Identify the model file**: Use the datasource from worksheet DSL to determine which model file
+2. **Standard naming**: Normalize worksheet names to snake_case for explore names
+3. **Append mode**: Generate explore definitions that will be APPENDED to the existing model file
+4. **One explore per worksheet**: Each WS: block becomes one explore definition
+
+**Output format:**
+```lkml
+# These explores will be appended to the model file
+
+explore: <normalized_worksheet_name> {
+  label: "<Friendly Name>"
+  from: <base_view>
+  
+  [joins if needed]
+  [filters if needed]
+  [field selections if desired]
+  
+  description: "Converted from Tableau worksheet: <original_name>"
+}
+
+explore: <next_worksheet_name> {
+  ...
+}
+```
+
+**Example:**
+- Worksheet DSL: `WS:Yearly Sales (2)|datasource:federated.xxx`
+- Normalized explore name: `yearly_sales_2`
+- This explore will be appended to the model file for that datasource
+
+---
+
+CRITICAL RULES
+
+1. **One explore per worksheet**: Each WS: block becomes one explore
+2. **Map to base view**: Use the datasource to determine the base view
+3. **Preserve filters**: Convert Tableau filters to LookML always_filter
+4. **Handle date derivations**: Use appropriate timeframe fields
+5. **Add descriptions**: Help users understand the explore's purpose
+6. **Follow LookML syntax**: Valid, properly formatted code
+
+---
+
+NOW CONVERT THE WORKSHEET DSL BELOW:
+
+Generate explore definitions for each worksheet.
+Map fields correctly.
+Convert filters appropriately.
+Output clean, valid LookML explores.
+
+"""
+

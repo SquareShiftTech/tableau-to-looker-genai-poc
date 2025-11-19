@@ -1,0 +1,86 @@
+You have Looker MCP tools. Create view files for ALL tables mentioned in the Field DSL.
+
+CRITICAL RULES:
+1. Identify all unique tables from the Field DSL (look for table:"xxx")
+2. Create ONE view file per table
+3. All SQL must be BigQuery syntax
+4. Infer measure types from field names (lat/long=average, amounts=sum, counts=sum)
+
+Looker Project: tableau_looker_team_test
+
+Connection Info:
+- Project: tableau-to-looker-migration
+- Dataset: Tableau_To_BigQuery
+
+Field DSL: See uploaded file
+
+---
+
+Transformation Examples:
+
+DSL: facility_name|table:"closestoffices"|db:"FacilityName"|string
+LookML:
+dimension: facility_name {
+  type: string
+  sql: ${TABLE}.FacilityName ;;
+}
+
+DSL: latitude|table:"closestoffices"|db:"Latitude"|number
+LookML:
+measure: latitude {
+  type: average
+  sql: ${TABLE}.Latitude ;;
+}
+
+DSL: mature_de_novo|string|formula:IF mature = 1 THEN "Mature" ELSE "De Novo" END
+LookML:
+dimension: mature_de_novo {
+  type: string
+  sql: CASE WHEN ${mature} = 1 THEN "Mature" ELSE "De Novo" END ;;
+}
+
+DSL: facility_code_name|string|formula:facilityname + " - " + facilitycode
+LookML:
+dimension: facility_code_name {
+  type: string
+  sql: CONCAT(${facilityname}, ' - ', ${facilitycode}) ;;
+}
+
+---
+
+BigQuery Formula Conversions:
+- String concat: + → CONCAT()
+- Conditionals: IF...THEN...ELSE...END → CASE WHEN...THEN...ELSE...END
+- Date add: DATEADD('day', n, date) → DATE_ADD(date, INTERVAL n DAY)
+- Date parts: YEAR(date) → EXTRACT(YEAR FROM date)
+- To string: STR(x) → CAST(x AS STRING)
+- Field refs: fieldname → ${fieldname}
+
+---
+
+Naming Convention:
+- View files: views/{table_name}.view.lkml (use exact table name from DSL)
+- sql_table_name: `tableau-to-looker-migration.Tableau_To_BigQuery.{table_name}`
+
+Example:
+For table "closestoffices":
+- File: views/closestoffices.view.lkml
+- sql_table_name: `tableau-to-looker-migration.Tableau_To_BigQuery.closestoffices`
+
+---
+
+Steps:
+1. Call dev_mode(true)
+2. Call get_projects() to get project_id (should be "tableau_looker_team_test")
+3. Read the uploaded Field DSL file
+4. Scan Field DSL to identify all unique table names
+5. For EACH table:
+   - Filter fields where table:"{table_name}"
+   - Generate view structure
+   - Call create_project_file(project_id, "views/{table_name}.view.lkml", content) if does not exists
+   - if exists call update_project_file (project_id, "views/{table_name}.view.lkml", content) append the details
+6. Confirm all view files created with their paths
+
+Expected Output:
+- views/closestoffices.view.lkml
+- views/dim_location.view.lkml
