@@ -1,0 +1,72 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Container Diagram - Assessment Accelerator Platform
+
+Person(client_engineer, "Client Data Engineer")
+Person(internal_user, "Internal User")
+
+System_Boundary(platform, "Assessment Accelerator Platform") {
+    
+    Container_Boundary(frontend, "Frontend Layer") {
+        Container(public_web, "Public Website", "React on Cloud Run", "Download utilities")
+        Container(internal_portal, "Internal Portal", "React on Cloud Run", "Trigger assessments")
+    }
+    
+    Container(auth, "Authentication", "Firebase Auth", "User authentication")
+    
+    Container(backend_api, "Backend API", "FastAPI on Cloud Run", "REST API, job management")
+    
+    Container(task_queue, "Job Queue", "Cloud Tasks", "Async processing")
+    
+    Container(agent_system, "Agent System", "LangGraph + Gemini on Cloud Run", "Multi-agent assessment workflow")
+    
+    Container(report_gen, "Report Generator", "Python on Cloud Run", "PDF generation")
+    
+    ContainerDb(firestore, "State Store", "Firestore", "Job status, metadata")
+    ContainerDb(gcs_storage, "File Storage", "GCS", "Source files + parsed data (JSON)")
+    ContainerDb(bigquery, "Data Warehouse", "BigQuery", "Analysis results")
+}
+
+System_Ext(tableau, "Tableau Server")
+System_Ext(powerbi, "Power BI")
+System_Ext(email, "Email Service")
+
+' Client workflow
+Rel(client_engineer, public_web, "Download utility")
+Rel(client_engineer, tableau, "Run utility")
+Rel(client_engineer, gcs_storage, "Upload files")
+
+' Internal user workflow
+Rel(internal_user, internal_portal, "Login")
+Rel(internal_portal, auth, "Authenticate")
+Rel(internal_portal, backend_api, "Create assessment")
+
+' Backend flow
+Rel(backend_api, firestore, "Create job")
+Rel(backend_api, task_queue, "Enqueue")
+Rel(task_queue, agent_system, "Trigger processing")
+
+' Agent processing
+Rel(agent_system, gcs_storage, "Read/Write")
+Rel(agent_system, firestore, "Update status")
+Rel(agent_system, bigquery, "Store results")
+
+' Report generation
+Rel(internal_portal, report_gen, "Request report")
+Rel(report_gen, bigquery, "Query data")
+Rel(report_gen, internal_portal, "Return PDF")
+Rel(internal_user, email, "Send to client")
+
+note right of agent_system
+  Multi-agent workflow:
+  - Exploration
+  - Parsing
+  - Analysis
+  - Strategy
+  
+  See Agent Workflow diagram
+  for details
+end note
+
+@enduml

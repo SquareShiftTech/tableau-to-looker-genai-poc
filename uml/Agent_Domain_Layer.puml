@@ -1,0 +1,103 @@
+@startuml
+
+title Agent Domain Layer - Class Structure
+
+abstract class BaseAgent {
+    # llm_service: LLMService
+    # storage_service: StorageService
+    # validator: ValidationService
+    # prompt_manager: PromptManager
+    
+    + execute(state: AssessmentState): AssessmentState
+    # call_llm(prompt: str, content: str): Dict
+    # validate_output(result: Dict): bool
+    # update_state(state: AssessmentState, updates: Dict): AssessmentState
+    # handle_error(error: Exception, state: AssessmentState): AssessmentState
+}
+
+class ExplorationAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - discover_components(file_content: str): Dict
+    - count_components(components: Dict): Dict
+}
+
+class ParsingAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - load_manifest(gcs_path: str): Dict
+    - extract_details(file_content: str, manifest: Dict): Dict
+    - normalize_data(raw_data: Dict): Dict
+}
+
+class CalculationAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - analyze_calculation(calc: Dict): Dict
+    - determine_complexity(formula: str, platform: str): str
+    - estimate_effort(complexity: str): int
+}
+
+class VisualizationAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - analyze_visualization(viz: Dict): Dict
+    - determine_chart_complexity(chart_type: str): str
+}
+
+class DashboardAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - analyze_dashboard(dashboard: Dict): Dict
+    - assess_interactivity(filters: List, actions: List): str
+}
+
+class DataSourceAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - analyze_datasource(ds: Dict): Dict
+    - check_looker_compatibility(connection_type: str): str
+}
+
+class StrategyAgent {
+    + execute(state: AssessmentState): AssessmentState
+    - load_all_analyses(job_id: str): Dict
+    - calculate_total_effort(analyses: Dict): int
+    - identify_challenges(analyses: Dict): List
+    - generate_recommendations(challenges: List): List
+}
+
+BaseAgent <|-- ExplorationAgent
+BaseAgent <|-- ParsingAgent
+BaseAgent <|-- CalculationAgent
+BaseAgent <|-- VisualizationAgent
+BaseAgent <|-- DashboardAgent
+BaseAgent <|-- DataSourceAgent
+BaseAgent <|-- StrategyAgent
+
+class AssessmentState {
+    + job_id: str
+    + source_platform: str
+    + gcs_source_path: str
+    + status: AssessmentStatus
+    + current_step: str
+    + manifest_path: Optional[str]
+    + parsed_components_path: Optional[str]
+    + calculation_analysis_complete: bool
+    + visualization_analysis_complete: bool
+    + dashboard_analysis_complete: bool
+    + datasource_analysis_complete: bool
+    + strategy_complete: bool
+    + errors: List[str]
+    + retry_count: int
+}
+
+BaseAgent ..> AssessmentState : uses
+
+note right of BaseAgent
+  Abstract base class
+  Common functionality
+  All agents inherit
+end note
+
+note bottom of AssessmentState
+  Immutable state object
+  Passed between agents
+  Each agent returns NEW state
+end note
+
+@enduml

@@ -1,0 +1,122 @@
+@startuml
+
+!theme plain
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+
+title Assessment Accelerator - Complete Architecture
+
+' Top layer - Users
+actor Client
+actor "Internal\nUser" as internal
+
+' Entry layer
+component [Client Utility] as utility
+component [Web Portal] as portal
+
+' API & Auth layer
+rectangle "API & Auth" {
+    [Backend API]
+    [Firebase Auth]
+    [Cloud Tasks]
+}
+
+' Orchestration
+rectangle "Orchestration" #FFFFCC {
+    [Agent Orchestrator] as orch
+    [State Manager] as state
+}
+
+' Agents - Main processing
+rectangle "Agent Layer" #CCFFCC {
+    rectangle "Discovery" {
+        [Exploration\nAgent] as a1
+    }
+    rectangle "Extraction" {
+        [Parsing\nAgent] as a2
+    }
+    rectangle "Analysis" {
+        [Calculation\nAgent] as a3
+        [Visualization\nAgent] as a4
+        [Dashboard\nAgent] as a5
+        [Data Source\nAgent] as a6
+    }
+    rectangle "Strategy" {
+        [Strategy\nAgent] as a7
+    }
+}
+
+' Services
+rectangle "Services" #E0E0E0 {
+    [LLM Service\nGemini]
+    [Storage Service\nGCS]
+    [Validation Service]
+    [Prompt Manager]
+}
+
+' Data stores
+rectangle "Data Layer" #FFE0E0 {
+    database "GCS\nSource" as gcs1
+    database "GCS\nParsed" as gcs2
+    database "Firestore\nState" as fs
+    database "BigQuery\nResults" as bq
+}
+
+' External
+cloud "External" {
+    [Tableau]
+    [Power BI]
+    [Looker]
+}
+
+' Connections - simplified
+Client --> utility
+utility --> [Tableau]
+utility --> [Power BI]
+utility --> gcs1
+
+internal --> portal
+portal --> [Backend API]
+[Backend API] --> fs
+[Backend API] --> [Cloud Tasks]
+[Cloud Tasks] --> orch
+
+orch --> state
+state --> fs
+
+orch --> a1
+orch --> a2
+orch --> a3
+orch --> a4
+orch --> a5
+orch --> a6
+orch --> a7
+
+a1 --> [LLM Service\nGemini]
+a2 --> [LLM Service\nGemini]
+a3 --> [LLM Service\nGemini]
+a4 --> [LLM Service\nGemini]
+a5 --> [LLM Service\nGemini]
+a6 --> [LLM Service\nGemini]
+a7 --> [LLM Service\nGemini]
+
+a1 --> gcs2
+a2 --> gcs2
+a3 --> bq
+a4 --> bq
+a5 --> bq
+a6 --> bq
+a7 --> bq
+
+a6 -.-> [Looker] : validate
+
+note bottom
+    **Agentic Components:**
+    • 7 specialized agents powered by Gemini 1.5 Pro
+    • Platform-agnostic processing (Tableau, Power BI, MicroStrategy, Cognos)
+    • Parallel analysis for performance
+    • Validation at each step
+    • Complete audit trail in Firestore
+end note
+
+@enduml

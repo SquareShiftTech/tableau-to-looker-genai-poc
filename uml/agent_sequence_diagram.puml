@@ -1,0 +1,69 @@
+@startuml
+
+title Exploration Agent Execution Flow
+
+actor Orchestrator
+participant "ExplorationAgent" as agent
+participant "PromptManager" as prompts
+participant "StorageService" as storage
+participant "LLMService" as llm
+participant "ValidationService" as validator
+participant "StateManager" as state_mgr
+
+Orchestrator -> agent: execute(state)
+activate agent
+
+agent -> prompts: get_prompt(platform="tableau", step="exploration")
+prompts --> agent: exploration_prompt
+
+agent -> storage: read_file(state.gcs_source_path)
+storage --> agent: file_content
+
+agent -> agent: prepare_llm_input(prompt, file_content)
+
+agent -> llm: call(prompt, content)
+activate llm
+note right: Gemini API call
+llm --> agent: raw_result (JSON string)
+deactivate llm
+
+agent -> agent: parse_json(raw_result)
+
+agent -> validator: validate_component_count(parsed_result)
+activate validator
+validator -> storage: read_file(state.gcs_source_path)
+validator -> validator: count_actual_components()
+validator --> agent: validation_result
+deactivate validator
+
+alt validation passed
+    agent -> storage: write_json(manifest, gcs_path)
+    storage --> agent: manifest_gcs_path
+    
+    agent -> state_mgr: update_firestore(job_id, status="parsing")
+    
+    agent -> agent: create_new_state(
+    note right
+        new_state = replace(state,
+            status=PARSING,
+            manifest_path=manifest_gcs_path,
+            current_step="parsing"
+        )
+    end note
+    
+    agent --> Orchestrator: new_state
+    
+else validation failed
+    agent -> agent: increment_retry_count()
+    
+    alt retry_count < max_retries
+        agent -> agent: execute(state) [retry]
+    else max retries exceeded
+        agent -> agent: create_error_state()
+        agent --> Orchestrator: error_state
+    end
+end
+
+deactivate agent
+
+@enduml

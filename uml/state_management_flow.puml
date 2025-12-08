@@ -1,0 +1,68 @@
+@startuml
+
+title State Flow Through Agent System
+
+state "Queued" as queued
+state "Exploring" as exploring
+state "Parsing" as parsing
+state "Analyzing" as analyzing
+state "Strategizing" as strategizing
+state "Completed" as completed
+state "Failed" as failed
+
+[*] --> queued : Job created
+
+queued --> exploring : ExplorationAgent.execute()
+note on link
+  state = replace(state,
+    status=EXPLORING,
+    current_step="exploring"
+  )
+end note
+
+exploring --> parsing : Success
+exploring --> failed : Error (max retries)
+
+parsing --> analyzing : ParsingAgent.execute()
+note on link
+  state = replace(state,
+    status=ANALYZING,
+    parsed_components_path="gs://..."
+  )
+end note
+
+parsing --> failed : Error
+
+analyzing --> strategizing : All analysis agents complete
+note on link
+  state = replace(state,
+    calculation_analysis_complete=True,
+    visualization_analysis_complete=True,
+    dashboard_analysis_complete=True,
+    datasource_analysis_complete=True
+  )
+end note
+
+analyzing --> failed : Error
+
+strategizing --> completed : StrategyAgent.execute()
+note on link
+  state = replace(state,
+    status=COMPLETED,
+    strategy_complete=True,
+    completed_at=now()
+  )
+end note
+
+strategizing --> failed : Error
+
+completed --> [*]
+failed --> [*]
+
+note right of queued
+  State is immutable
+  Each transition creates
+  NEW state object
+end note
+
+@enduml

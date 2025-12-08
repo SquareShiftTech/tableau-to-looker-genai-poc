@@ -1,0 +1,89 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_TOP_DOWN()
+SHOW_LEGEND()
+
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 80
+
+title Agent Workflow - 3-Step Assessment Process
+
+Container_Boundary(agent_system, "Agent System") {
+    
+    Component(orchestrator, "Agent Orchestrator", "LangGraph", "Coordinates 3-step workflow")
+    
+    ' Step 1
+    Component(explore_agent, "Step 1: Exploration Agent", "Gemini", "Discover all components")
+    Component(validator1, "Validator", "Python", "Validate component count")
+    
+    ' Step 2
+    Component(parse_agent, "Step 2: Parsing Agent", "Gemini", "Extract complete details")
+    Component(validator2, "Validator", "Python", "Validate extraction quality")
+    
+    ' Step 3 - Analysis Agents (in a row)
+    Component(calc_agent, "Step 3a: Calculation Agent", "Gemini", "Analyze calc complexity")
+    Component(viz_agent, "Step 3b: Visualization Agent", "Gemini", "Analyze viz complexity")
+    Component(dash_agent, "Step 3c: Dashboard Agent", "Gemini", "Analyze dashboard complexity")
+    Component(ds_agent, "Step 3d: Data Source Agent", "Gemini", "Check compatibility")
+    
+    ' Step 4
+    Component(strategy_agent, "Step 4: Strategy Agent", "Gemini", "Aggregate & recommend")
+}
+
+' External storage - arranged at bottom
+ComponentDb(gcs_files, "Source Files", "GCS", "Tableau/Power BI files")
+ComponentDb(gcs_parsed, "Parsed Data", "GCS", "manifest.json, parsed_components.json")
+ComponentDb(firestore, "Job State", "Firestore", "Status tracking")
+ComponentDb(bigquery, "Results", "BigQuery", "Final analysis")
+
+' Orchestrator connections - top to bottom flow
+Rel_Down(orchestrator, explore_agent, "Trigger")
+Rel_Down(orchestrator, parse_agent, "Trigger")
+Rel_Down(orchestrator, calc_agent, "Trigger")
+Rel_Down(orchestrator, viz_agent, "Trigger")
+Rel_Down(orchestrator, dash_agent, "Trigger")
+Rel_Down(orchestrator, ds_agent, "Trigger")
+Rel_Down(orchestrator, strategy_agent, "Trigger")
+
+' Step 1 flow
+Rel(explore_agent, gcs_files, "Read")
+Rel(explore_agent, validator1, "Validate")
+Rel(explore_agent, gcs_parsed, "Write\nmanifest.json")
+Rel(explore_agent, firestore, "Update status")
+
+' Step 2 flow
+Rel(parse_agent, gcs_parsed, "Read\nmanifest.json")
+Rel(parse_agent, gcs_files, "Read source")
+Rel(parse_agent, validator2, "Validate")
+Rel(parse_agent, gcs_parsed, "Write\nparsed_components.json")
+Rel(parse_agent, firestore, "Update status")
+
+' Step 3 flow (parallel agents)
+Rel(calc_agent, gcs_parsed, "Read")
+Rel(viz_agent, gcs_parsed, "Read")
+Rel(dash_agent, gcs_parsed, "Read")
+Rel(ds_agent, gcs_parsed, "Read")
+
+Rel(calc_agent, bigquery, "Write")
+Rel(viz_agent, bigquery, "Write")
+Rel(dash_agent, bigquery, "Write")
+Rel(ds_agent, bigquery, "Write")
+
+Rel(orchestrator, firestore, "Update status")
+
+' Step 4 flow
+Rel(strategy_agent, bigquery, "Read all")
+Rel(strategy_agent, bigquery, "Write final report")
+Rel(strategy_agent, firestore, "Update:\ncompleted")
+
+' Layout hints for better flow
+orchestrator -[hidden]-> explore_agent
+explore_agent -[hidden]-> parse_agent
+parse_agent -[hidden]-> calc_agent
+calc_agent -[hidden]right-> viz_agent
+viz_agent -[hidden]right-> dash_agent
+dash_agent -[hidden]right-> ds_agent
+ds_agent -[hidden]-> strategy_agent
+@enduml

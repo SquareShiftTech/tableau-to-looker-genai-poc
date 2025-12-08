@@ -1,0 +1,82 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Layered Architecture - Agent System
+
+package "Presentation Layer" {
+    component [API Endpoints] as api
+}
+
+package "Application Layer" {
+    component [AgentOrchestrator] as orchestrator
+    component [WorkflowManager] as workflow
+}
+
+package "Domain Layer (Agents)" {
+    component [ExplorationAgent] as explore
+    component [ParsingAgent] as parse
+    component [CalculationAgent] as calc
+    component [VisualizationAgent] as viz
+    component [DashboardAgent] as dash
+    component [DataSourceAgent] as ds
+    component [StrategyAgent] as strategy
+}
+
+package "Infrastructure Layer" {
+    component [LLMService] as llm
+    component [StorageService] as storage
+    component [ValidationService] as validator
+    component [PromptManager] as prompts
+    component [StateManager] as state_mgr
+}
+
+api --> orchestrator
+orchestrator --> workflow
+workflow --> explore
+workflow --> parse
+workflow --> calc
+workflow --> viz
+workflow --> dash
+workflow --> ds
+workflow --> strategy
+
+explore --> llm
+explore --> storage
+explore --> validator
+explore --> prompts
+explore --> state_mgr
+
+parse --> llm
+parse --> storage
+parse --> validator
+parse --> prompts
+
+calc --> llm
+calc --> storage
+calc --> prompts
+
+viz --> llm
+viz --> storage
+
+dash --> llm
+dash --> storage
+
+ds --> llm
+ds --> storage
+
+strategy --> llm
+strategy --> storage
+
+note right of "Domain Layer (Agents)"
+  Business logic
+  Each agent is independent
+  Uses infrastructure services
+end note
+
+note right of "Infrastructure Layer"
+  Shared services
+  Reusable across agents
+  No business logic
+end note
+
+@enduml

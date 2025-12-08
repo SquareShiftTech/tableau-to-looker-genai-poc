@@ -1,0 +1,138 @@
+@startuml
+title Assessment Accelerator - Component Architecture (Low Level Design)
+
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 80
+skinparam packageStyle rectangle
+
+' ===== PRESENTATION LAYER =====
+package "Presentation Layer" #E3F2FD {
+    [Public Website] as public
+    [Internal Portal] as portal
+}
+
+' ===== API LAYER =====
+package "API Layer" #2196F3 {
+    [Firebase Auth] as auth
+    [Backend API] as api
+    [Cloud Tasks] as tasks
+}
+
+' ===== ORCHESTRATION LAYER =====
+package "Orchestration Layer" #4CAF50 {
+    [Agent Orchestrator] as orchestrator
+}
+
+' ===== AGENT LAYER =====
+package "Agent Layer" #FF9800 {
+    [Exploration Agent] as explore
+    [Parsing Agent] as parse
+    [Calculation Agent] as calc
+    [Visualization Agent] as viz
+    [Dashboard Agent] as dash
+    [Data Source Agent] as ds
+    [Strategy Agent] as strategy
+}
+
+' ===== SERVICE LAYER =====
+package "Service Layer" #9C27B0 {
+    [LLM Service] as llm
+    [Storage Service] as storage
+    [Validation Service] as validator
+    [Prompt Manager] as prompts
+    [State Manager] as state_mgr
+}
+
+' ===== DATA LAYER =====
+package "Data Layer" {
+    database "GCS Source" as gcs_source
+    database "GCS Parsed" as gcs_parsed
+    database "Firestore" as firestore
+    database "BigQuery" as bigquery
+}
+
+' ===== RELATIONSHIPS =====
+
+' Presentation to API
+portal --> auth
+portal --> api
+
+' API to Orchestration
+api --> tasks
+tasks --> orchestrator
+
+' Orchestration to Agents
+orchestrator --> explore
+orchestrator --> parse
+orchestrator --> calc
+orchestrator --> viz
+orchestrator --> dash
+orchestrator --> ds
+orchestrator --> strategy
+
+' Exploration Agent
+explore --> llm
+explore --> storage
+explore --> validator
+explore --> state_mgr
+explore --> prompts
+
+' Parsing Agent
+parse --> llm
+parse --> storage
+parse --> validator
+parse --> prompts
+parse --> state_mgr
+
+' Analysis Agents
+calc --> llm
+calc --> storage
+viz --> llm
+viz --> storage
+dash --> llm
+dash --> storage
+ds --> llm
+ds --> storage
+
+' Strategy Agent
+strategy --> llm
+strategy --> storage
+strategy --> state_mgr
+
+' Services to Data
+storage --> gcs_source
+storage --> gcs_parsed
+storage --> bigquery
+state_mgr --> firestore
+
+' ===== LAYOUT HINTS =====
+
+public -[hidden]right-> portal
+auth -[hidden]right-> api
+api -[hidden]right-> tasks
+
+explore -[hidden]right-> parse
+calc -[hidden]right-> viz
+dash -[hidden]right-> ds
+calc -[hidden]down-> dash
+viz -[hidden]down-> ds
+
+llm -[hidden]right-> storage
+validator -[hidden]right-> prompts
+llm -[hidden]down-> validator
+storage -[hidden]down-> prompts
+
+gcs_source -[hidden]right-> gcs_parsed
+firestore -[hidden]right-> bigquery
+gcs_source -[hidden]down-> firestore
+gcs_parsed -[hidden]down-> bigquery
+
+portal -[hidden]down-> api
+api -[hidden]down-> orchestrator
+orchestrator -[hidden]down-> parse
+parse -[hidden]down-> calc
+calc -[hidden]down-> llm
+llm -[hidden]down-> gcs_source
+
+@enduml

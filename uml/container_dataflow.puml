@@ -1,0 +1,79 @@
+@startuml
+skinparam defaultTextAlignment center
+
+title Data Flow - Assessment Process
+
+|Client|
+start
+:Download Utility;
+:Run on Local Machine;
+:Upload Files to GCS;
+
+|Backend API|
+:Receive Assessment Request;
+:Create Job in Firestore
+(status: queued);
+:Enqueue Cloud Task;
+:Return job_id;
+
+|Cloud Tasks|
+:Trigger Orchestrator;
+
+|Agent Orchestrator|
+:Update Firestore
+(status: running);
+
+partition "Step 1: Exploration" {
+  :Read Source Files (GCS);
+  :Discover Components;
+  :Validate Count;
+  :Save manifest.json (GCS);
+  :Update Firestore
+  (status: exploring);
+}
+
+partition "Step 2: Parsing" {
+  :Load manifest.json;
+  :Read Source Files;
+  :Extract Details;
+  :Validate Extraction;
+  :Save parsed_components.json (GCS);
+  :Update Firestore
+  (status: parsing);
+}
+
+partition "Step 3: Analysis" {
+  fork
+    :Analyze Calculations;
+  fork again
+    :Analyze Visualizations;
+  fork again
+    :Analyze Dashboards;
+  fork again
+    :Analyze Data Sources;
+  end fork
+  :Store in BigQuery;
+  :Update Firestore
+  (status: analyzing);
+}
+
+:Create Strategy;
+:Store Final Report (BigQuery);
+:Update Firestore
+(status: completed);
+
+|Internal Portal|
+:Check Job Status;
+:Request Report;
+
+|Report Generator|
+:Query BigQuery;
+:Generate PDF;
+:Return to User;
+
+|Internal User|
+:Download PDF;
+:Email to Client;
+stop
+
+@enduml

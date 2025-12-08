@@ -1,0 +1,73 @@
+@startuml
+
+title Infrastructure Layer - Services
+
+class LLMService {
+    - api_key: str
+    - model: str
+    - temperature: float
+    
+    + call(prompt: str, content: str, platform: str): str
+    + call_structured(prompt: str, schema: Dict): Dict
+    - handle_rate_limit(): void
+    - handle_error(error: Exception): void
+}
+
+class StorageService {
+    - gcs_client: storage.Client
+    
+    + read_file(gcs_path: str): str
+    + write_json(data: Dict, gcs_path: str): str
+    + write_file(content: str, gcs_path: str): str
+    + file_exists(gcs_path: str): bool
+}
+
+class ValidationService {
+    + validate_component_count(result: Dict, source_file: str): ValidationResult
+    + validate_extraction(result: Dict, expected_schema: Dict): ValidationResult
+    + validate_json_schema(data: Dict, schema: Dict): bool
+}
+
+class PromptManager {
+    - prompts: Dict[str, str]
+    
+    + get_prompt(platform: str, step: str): str
+    + format_prompt(template: str, variables: Dict): str
+    - load_prompts(): Dict
+}
+
+class StateManager {
+    - firestore_client: firestore.Client
+    
+    + save_state(job_id: str, state: AssessmentState): void
+    + load_state(job_id: str): AssessmentState
+    + update_status(job_id: str, status: str): void
+}
+
+class ValidationResult {
+    + is_valid: bool
+    + errors: List[str]
+    + warnings: List[str]
+}
+
+ValidationService ..> ValidationResult : returns
+
+note right of LLMService
+  Handles all Gemini API calls
+  Manages retries, rate limits
+  Structured output parsing
+end note
+
+note right of PromptManager
+  Embedded prompts in code
+  Platform-specific templates
+  Variable substitution
+end note
+
+note right of StateManager
+  Persists state to Firestore
+  Only state, not full data
+  For job tracking & recovery
+end note
+
+@enduml

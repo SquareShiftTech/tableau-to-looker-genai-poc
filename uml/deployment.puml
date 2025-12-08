@@ -1,0 +1,125 @@
+@startuml
+left to right direction
+
+' To use GCP icons:
+' 1. Download GCP icons from: https://cloud.google.com/icons
+' 2. Save them in a folder (e.g., icons/gcp/)
+' 3. Uncomment the icon references below and update paths
+
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 80
+skinparam rectangle {
+    RoundCorner 10
+}
+
+' Lighter, normalized GCP colors
+skinparam component {
+    BackgroundColor #E3F2FD
+    BorderColor #90CAF9
+}
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #FFCC80
+}
+
+title Deployment Architecture - Assessment Accelerator
+
+' Top Layer - Client Side (centered)
+actor Client
+[Assessment Utility] as Utility
+
+' Main Platform - Google Cloud Platform (arranged left to right)
+cloud "Google Cloud Platform" #E3F2FD {
+    
+    ' Left: Frontend Layer
+    rectangle "Cloud Run - Frontend" #C8E6C9 {
+        rectangle "**Cloud Run**\nPublic Website\nReact:3000" as PublicWeb #E1F5FE
+        rectangle "**Cloud Run**\nInternal Portal\nReact:3001" as InternalPortal #E1F5FE
+    }
+    
+    ' Center-Left: Backend Layer
+    rectangle "Cloud Run - Backend" #BBDEFB {
+        rectangle "**Cloud Run**\nBackend API\nFastAPI:8000" as BackendAPI #E1F5FE
+        rectangle "**Cloud Run**\nReport Generator\nPython:8008" as ReportGen #E1F5FE
+    }
+    
+    ' Center: Auth & Queue
+    rectangle "Auth & Queue" #FFCDD2 {
+        rectangle "**Firebase Auth**" as FirebaseAuth #FFF9C4
+        rectangle "**Cloud Tasks**" as CloudTasks #FFCDD2
+    }
+    
+    ' Center-Right: Agent Layer
+    rectangle "Cloud Run - Agents" #FFF9C4 {
+        rectangle "**Cloud Run**\nOrchestrator\nLangGraph:8001" as Orchestrator #E1F5FE
+        rectangle "**Cloud Run**\nExploration Agent:8002" as ExploreAgent #E1F5FE
+        rectangle "**Cloud Run**\nParsing Agent:8003" as ParseAgent #E1F5FE
+        rectangle "**Cloud Run**\nCalculation Agent:8004" as CalcAgent #E1F5FE
+        rectangle "**Cloud Run**\nVisualization Agent:8005" as VizAgent #E1F5FE
+        rectangle "**Cloud Run**\nDashboard Agent:8006" as DashAgent #E1F5FE
+        rectangle "**Cloud Run**\nData Source Agent:8007" as DSAgent #E1F5FE
+        rectangle "**Cloud Run**\nStrategy Agent:8009" as StrategyAgent #E1F5FE
+    }
+    
+    ' Right: AI/ML Services
+    rectangle "AI/ML Services" #C8E6C9 {
+        rectangle "**Vertex AI**\nGemini 1.5 Pro" as VertexAI #C8E6C9
+    }
+}
+
+' Bottom Layer - Storage & Data (arranged left to right)
+rectangle "Storage & Data" #FFF3E0 {
+    database "**Cloud Storage**\n(3 buckets)" as GCS #E1F5FE
+    database "**Firestore**\n(Job state)" as FS #FFE0B2
+    database "**BigQuery**\n(Results)" as BQ #E1F5FE
+}
+
+' Top to Bottom Flow - Client Side
+Client --> Utility
+Client --> PublicWeb
+Client --> InternalPortal
+Utility --> GCS
+
+' Frontend to Backend (left to right)
+PublicWeb --> BackendAPI
+InternalPortal --> FirebaseAuth
+InternalPortal --> BackendAPI
+
+' Backend to Services (left to right)
+BackendAPI --> FS
+BackendAPI --> CloudTasks
+BackendAPI --> ReportGen
+
+' Queue to Orchestrator (center flow)
+CloudTasks --> Orchestrator
+
+' Orchestrator to Agents (center to right)
+Orchestrator --> ExploreAgent
+Orchestrator --> ParseAgent
+Orchestrator --> CalcAgent
+Orchestrator --> VizAgent
+Orchestrator --> DashAgent
+Orchestrator --> DSAgent
+Orchestrator --> StrategyAgent
+
+' Agents to Vertex AI (right side)
+ExploreAgent --> VertexAI
+ParseAgent --> VertexAI
+CalcAgent --> VertexAI
+VizAgent --> VertexAI
+DashAgent --> VertexAI
+DSAgent --> VertexAI
+StrategyAgent --> VertexAI
+
+' Agents to Storage (bottom flow)
+ExploreAgent --> GCS
+ParseAgent --> GCS
+CalcAgent --> BQ
+VizAgent --> BQ
+DashAgent --> BQ
+DSAgent --> BQ
+StrategyAgent --> BQ
+
+@enduml

@@ -1,0 +1,6 @@
+Feature,Cognos 11.x,Looker,Migration Feasibility
+REST API Availability,"None (SOAP-based web services only)","Full REST API with comprehensive endpoints","High effort - Migration tools must use Java SDK instead of REST calls"
+SDK Language Support,"Java SDK, .NET SDK only","Python, TypeScript, Java, C#, Ruby, Go, R (official SDKs)","High effort - Migration tools must use Java SDK instead of Python SDK"
+Metadata Extraction,Java SDK traversal of content store required,"REST API (/metadata, /lookml_models endpoints)","High effort - Complex SDK initialization and traversal logic needed for extraction"
+Authentication Method,CAM-based session authentication,"OAuth 2.0, API tokens, SSO integration","Medium effort - Session management and credential handling complexity in migration tools"
+Content Deployment,SDK import/export (archive files),REST API + Git integration for LookML,"High effort - Must handle SDK-based extraction and Git-based deployment in migration tools"

@@ -1,0 +1,76 @@
+@startuml context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 80
+
+title System Context - Assessment Accelerator
+
+' Top Layer: Two actors side by side (symmetrical)
+Person(client_engineer, "Client Data Engineer", "Downloads utility, collects\nfiles, uploads to GCS")
+Person(internal_team, "Internal Team\n(SquareShift)", "Triggers assessment,\nreceives reports")
+
+' Center: Main System (single focal point)
+System(assessment_platform, "Assessment Accelerator\nPlatform", "Processes BI files and generates\nmigration assessment reports")
+
+' Left Side: Client Utility
+System_Ext(client_utility, "Client Utility", "Multi-BI source support")
+
+' Middle Layer: 4 BI Platforms (symmetrical horizontal arrangement)
+System_Ext(tableau, "Tableau\nServer", "BI platform")
+System_Ext(powerbi, "Power BI", "BI platform")
+System_Ext(microstrategy, "MicroStrategy", "BI platform")
+System_Ext(cognos, "Cognos", "BI platform")
+
+' Bottom Layer: Storage (centered)
+SystemDb_Ext(client_gcs, "Client's GCS Bucket", "Stores collected BI files")
+
+' === CLIENT WORKFLOW (Left side) ===
+Rel(client_engineer, assessment_platform, "Downloads\nutility", "HTTPS")
+Rel(assessment_platform, client_utility, "Provides")
+Rel(client_engineer, client_utility, "Uses")
+
+' Utility to BI platforms
+Rel(client_utility, tableau, "Collects")
+Rel(client_utility, powerbi, "Collects")
+Rel(client_utility, microstrategy, "Collects")
+Rel(client_utility, cognos, "Collects")
+
+' BI platforms to storage
+Rel(tableau, client_gcs, "Upload")
+Rel(powerbi, client_gcs, "Upload")
+Rel(microstrategy, client_gcs, "Upload")
+Rel(cognos, client_gcs, "Upload")
+
+' === INTERNAL WORKFLOW (Right side) ===
+Rel(internal_team, assessment_platform, "Triggers\n+ GCS path", "API")
+Rel(assessment_platform, client_gcs, "Reads files", "GCS API")
+Rel(assessment_platform, internal_team, "Delivers\nPDF report", "Email/Portal")
+
+' === LAYOUT HINTS for symmetry ===
+' Top row: actors
+client_engineer -[hidden]right-> internal_team
+
+' Connect actors to platform
+client_engineer -[hidden]down-> assessment_platform
+internal_team -[hidden]down-> assessment_platform
+
+' Platform to utility (left side)
+assessment_platform -[hidden]left-> client_utility
+
+' Middle row: BI platforms in a line
+client_utility -[hidden]down-> tableau
+tableau -[hidden]right-> powerbi
+powerbi -[hidden]right-> microstrategy
+microstrategy -[hidden]right-> cognos
+
+' Bottom: storage centered under BI platforms
+tableau -[hidden]down-> client_gcs
+powerbi -[hidden]down-> client_gcs
+microstrategy -[hidden]down-> client_gcs
+cognos -[hidden]down-> client_gcs
+
+@enduml
