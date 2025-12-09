@@ -24,17 +24,28 @@ async def main():
         source_files=[
             {"platform": "tableau", "file_path": "input_files/tableau/sales_summary_final.xml"},
         ],
+        # Legacy fields (kept for backward compatibility)
         file_analysis_strategy=None,
+        strategy_refinement_needed=None,
+        strategy_refinement_count=0,
+        # New architecture fields
+        parsed_elements_paths=None,
+        output_dir=None,
+        # Component discovery
         discovered_components=None,
+        # Parsing outputs
         parsed_metrics=None,
         parsed_dashboards=None,
         parsed_visualizations=None,
         parsed_datasources=None,
+        # Specialized agent outputs
         calculation_analysis=None,
         visualization_analysis=None,
         dashboard_analysis=None,
         datasource_analysis=None,
+        # Final report
         final_report=None,
+        # Status
         status="initial",
         errors=[],
     )

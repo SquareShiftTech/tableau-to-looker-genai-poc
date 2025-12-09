@@ -16,6 +16,8 @@ async def test_exploration():
             {"platform": "tableau", "file_path": "input_files/tableau/sales_summary_final.xml"},
         ],
         file_analysis_strategy=None,
+        strategy_refinement_needed=None,
+        strategy_refinement_count=0,
         discovered_components=None,
         parsed_metrics=None,
         parsed_dashboards=None,

@@ -1,77 +1,108 @@
-"""File Analysis Agent - Step 0: Analyze file structure and create splitting strategy."""
+"""File Analysis Agent - Step 0: Extract first-level XML elements and save to separate files."""
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List
 from models.state import AssessmentState
-from services.file_structure_analyzer import TableauStructureAnalyzer
-from services.llm_service import llm_service
+from utils.xml_utils import get_first_level_elements, read_xml_element
 from utils.logger import logger
 
 
 async def file_analysis_agent(state: AssessmentState) -> AssessmentState:
     """
-    File Analysis Agent - Analyze file structure and create splitting strategy.
+    File Analysis Agent - Extract first-level XML elements and save to separate files.
     
     INPUT: state with source_files (local paths) and platform
-    OUTPUT: state with file_analysis_strategy populated
+    OUTPUT: state with parsed_elements_paths and output_dir populated
     
     Process:
-    1. Get platform from state (already provided, no detection needed)
-    2. Extract structure using lightweight parser (no full file load)
-    3. Call Gemini to create splitting strategy
-    4. Store strategy in state
+    1. Get first-level elements using get_first_level_elements() tool
+    2. For each element:
+       - Read ALL content using read_xml_element() (gets all instances of that element type)
+       - Save to output/{job_id}/{element_name}.xml (one file per element type)
+       - Store file path and metadata in state
+    3. Output: parsed_elements_paths list with all saved files
     """
     logger.info("Starting file analysis agent")
     
     source_files = state.get('source_files', [])
     if not source_files:
         logger.warning("No source files provided")
-        state['file_analysis_strategy'] = None
+        state['parsed_elements_paths'] = []
+        state['output_dir'] = None
         state['status'] = 'file_analysis_complete'
         return state
     
     first_file = source_files[0]
     file_path = first_file.get('file_path', '')
     platform = first_file.get('platform', 'tableau').lower()
+    job_id = state.get('job_id', 'default_job')
     
     logger.info(f"Analyzing file: {file_path} (platform: {platform})")
     
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
-        state['file_analysis_strategy'] = None
+        state['parsed_elements_paths'] = []
+        state['output_dir'] = None
         state['status'] = 'file_analysis_complete'
         state['errors'] = state.get('errors', []) + [f"File not found: {file_path}"]
         return state
     
     try:
-        # For now: Tableau only (platform comes from state)
-        if platform == 'tableau':
-            analyzer = TableauStructureAnalyzer()
-        else:
-            logger.warning(f"Platform {platform} not yet supported, using Tableau analyzer")
-            analyzer = TableauStructureAnalyzer()
+        # Create output directory
+        output_dir = os.path.join("output", job_id)
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Created output directory: {output_dir}")
         
-        # Extract structure (lightweight - no full file load)
-        structure_info = analyzer.extract_structure(file_path)
-        logger.info(f"Extracted structure: {len(structure_info['element_counts'])} unique element types")
-        logger.info(f"Element counts: {structure_info['element_counts']}")
+        # Get first-level elements
+        element_names = get_first_level_elements(file_path)
+        if not element_names:
+            logger.warning("No first-level elements found")
+            state['parsed_elements_paths'] = []
+            state['output_dir'] = output_dir
+            state['status'] = 'file_analysis_complete'
+            return state
         
-        # Call Gemini to create splitting strategy
-        strategy = await llm_service.create_file_splitting_strategy(
-            structure_info=structure_info,
-            platform=platform,
-            file_path=file_path
-        )
+        logger.info(f"Found {len(element_names)} first-level elements: {element_names}")
         
-        # Store strategy in state
-        state['file_analysis_strategy'] = strategy
+        # Process each element
+        parsed_elements_paths: List[Dict[str, Any]] = []
+        
+        for element_name in element_names:
+            logger.info(f"Processing element: {element_name}")
+            
+            # Read element content (all instances of this element type)
+            element_content = read_xml_element(file_path, element_name)
+            
+            if not element_content:
+                logger.warning(f"No content found for element '{element_name}', skipping")
+                continue
+            
+            # Save to file
+            element_file_path = os.path.join(output_dir, f"{element_name}.xml")
+            with open(element_file_path, 'w', encoding='utf-8') as f:
+                f.write(element_content)
+            
+            file_size = os.path.getsize(element_file_path)
+            logger.info(f"Saved {element_name} to {element_file_path} ({file_size:,} bytes)")
+            
+            # Store metadata
+            parsed_elements_paths.append({
+                'element_name': element_name,
+                'file_path': element_file_path,
+                'size_bytes': file_size
+            })
+        
+        # Update state
+        state['parsed_elements_paths'] = parsed_elements_paths
+        state['output_dir'] = output_dir
         state['status'] = 'file_analysis_complete'
         
-        logger.info(f"Completed file analysis agent - created strategy with {len(strategy.get('chunks', []))} chunks")
+        logger.info(f"Completed file analysis agent - extracted {len(parsed_elements_paths)} elements")
         return state
         
     except Exception as e:
-        logger.error(f"Error in file analysis: {e}")
-        state['file_analysis_strategy'] = None
+        logger.error(f"Error in file analysis: {e}", exc_info=True)
+        state['parsed_elements_paths'] = []
+        state['output_dir'] = None
         state['status'] = 'file_analysis_complete'
         state['errors'] = state.get('errors', []) + [f"File analysis error: {str(e)}"]
         return state

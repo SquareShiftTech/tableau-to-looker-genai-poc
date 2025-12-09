@@ -10,7 +10,13 @@ class AssessmentState(TypedDict):
     source_files: List[Dict[str, str]]  # [{"platform": "tableau", "file_path": "gs://..."}]
     
     # Step 0: File Analysis Agent Output
-    file_analysis_strategy: Optional[Dict[str, Any]]  # Splitting strategy for large files
+    file_analysis_strategy: Optional[Dict[str, Any]]  # Splitting strategy for large files (legacy, kept for backward compatibility)
+    strategy_refinement_needed: Optional[Dict[str, Any]]  # Feedback about what failed (for iterative re-strategizing) (legacy)
+    strategy_refinement_count: int  # How many times we've refined (prevent infinite loops) (legacy)
+    
+    # Step 0: File Analysis Agent Output (New architecture)
+    parsed_elements_paths: Optional[List[Dict[str, Any]]]  # List of {element_name, file_path, size_bytes}
+    output_dir: Optional[str]  # Output directory path (e.g., output/{job_id})
     
     # Step 1: Exploration Agent Output
     discovered_components: Optional[Dict[str, Any]]  # Components found: dashboards, metrics, visualizations, datasources

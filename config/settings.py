@@ -61,6 +61,11 @@ class Settings(BaseSettings):
         env="MAX_RETRIES",
         description="Maximum retry attempts for API calls"
     )
+    chunk_max_size_bytes: int = Field(
+        default=500000,
+        env="CHUNK_MAX_SIZE_BYTES",
+        description="Maximum size in bytes for file chunks (default: 500KB). Should be less than model's context window."
+    )
     
     class Config:
         env_file = ".env"

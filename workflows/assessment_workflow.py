@@ -50,7 +50,7 @@ def create_assessment_workflow() -> Any:
     # Define edges (workflow)
     workflow.set_entry_point("file_analysis")
     workflow.add_edge("file_analysis", "exploration")
-    workflow.add_edge("exploration", "parsing")
+    workflow.add_edge("exploration", "parsing")  # Simple linear flow
     workflow.add_edge("parsing", "calculation")
     workflow.add_edge("parsing", "visualization")
     workflow.add_edge("parsing", "dashboard")
