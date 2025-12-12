@@ -1,10 +1,46 @@
 """Dashboard Agent - Step 3c: Analyze dashboards."""
+import os
+import json
 from typing import List, Dict, Any
+from datetime import datetime
 from models.state import AssessmentState
-from services.llm_service import llm_service
 from services.bigquery_service import bigquery_service
-from dummy_data.sample_data import DUMMY_DASHBOARD
 from utils.logger import logger
+
+
+def _assess_complexity(features: Dict[str, Any], dependencies: Dict[str, Any]) -> str:
+    """Assess dashboard complexity based on features and dependencies."""
+    complexity_score = 0
+    
+    # Charts count
+    charts_count = features.get('charts_count', 0)
+    if charts_count > 10:
+        complexity_score += 2
+    elif charts_count > 5:
+        complexity_score += 1
+    
+    # Filters count
+    filters_count = features.get('filters_count', 0)
+    if filters_count > 5:
+        complexity_score += 1
+    
+    # Interactivity
+    interactivity = features.get('interactivity', [])
+    if len(interactivity) > 2:
+        complexity_score += 1
+    
+    # Dependencies
+    worksheets_count = len(dependencies.get('worksheets', []))
+    datasources_count = len(dependencies.get('datasources', []))
+    if worksheets_count > 5 or datasources_count > 3:
+        complexity_score += 1
+    
+    if complexity_score >= 4:
+        return 'high'
+    elif complexity_score >= 2:
+        return 'medium'
+    else:
+        return 'low'
 
 
 async def dashboard_agent(state: AssessmentState) -> AssessmentState:
@@ -13,13 +49,7 @@ async def dashboard_agent(state: AssessmentState) -> AssessmentState:
     
     INPUT: state with parsed_dashboards
     OUTPUT: state with dashboard_analysis populated
-    WRITES: BigQuery table "dashboards_analysis"
-    
-    FUTURE LLM IMPLEMENTATION:
-    Currently uses dummy data. To implement with real LLM:
-    1. Remove DUMMY_DASHBOARD usage
-    2. Call llm_service.analyze_dashboards(state['parsed_dashboards'])
-    3. Parse LLM response into structured format
+    WRITES: BigQuery table "dashboards"
     """
     
     logger.info("Starting dashboard agent")
@@ -31,30 +61,53 @@ async def dashboard_agent(state: AssessmentState) -> AssessmentState:
         state['status'] = 'analysis_complete'
         return state
     
-    # Step 1: Get data (from state or call LLM service)
-    # FUTURE: Call LLM to analyze dashboards
-    # analysis = await llm_service.analyze_dashboards(parsed_dashboards)
-    
-    # Currently using dummy data
-    analysis = DUMMY_DASHBOARD
-    
-    # Add job_id to each analysis record
     job_id = state.get('job_id', 'unknown')
-    for record in analysis:
-        record['job_id'] = job_id
+    created_at = datetime.utcnow().isoformat() + 'Z'
+    
+    # Process each parsed dashboard
+    analysis: List[Dict[str, Any]] = []
+    
+    for dashboard in parsed_dashboards:
+        workbook_name = dashboard.get('workbook_name', 'unknown')
+        dashboard_id = dashboard.get('id', '')
+        dashboard_name = dashboard.get('name', 'unnamed_dashboard')
+        features = dashboard.get('features', {})
+        dependencies = dashboard.get('dependencies', {})
+        
+        # Assess complexity
+        complexity = _assess_complexity(features, dependencies)
+        
+        # Build analysis record
+        record = {
+            'workbook_name': workbook_name,
+            'name': dashboard_name,
+            'id': dashboard_id,
+            'features': features,
+            'complexity': complexity,
+            'dependencies': dependencies,
+            'job_id': job_id,
+            'created_at': created_at
+        }
+        
+        analysis.append(record)
     
     logger.info(f"Analyzed {len(analysis)} dashboards")
-    total_worksheets = sum(a.get('worksheets_count', 0) for a in analysis)
-    total_filters = sum(a.get('filters_count', 0) for a in analysis)
-    logger.info(f"Total worksheets: {total_worksheets}, Total filters: {total_filters}")
     
-    # Step 2: Write to BigQuery
-    bigquery_service.insert_rows("dashboards_analysis", analysis)
+    # Write to BigQuery (temporarily disabled)
+    if analysis:
+        bigquery_service.insert_rows("dashboards", analysis)
     
-    # Step 3: Update state
-    state['dashboard_analysis'] = analysis
-    state['status'] = 'analysis_complete'
+    # Write to JSON file
+    output_dir = state.get('output_dir')
+    if output_dir and analysis:
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, "dashboard_analysis.json")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(analysis, f, indent=2)
+        logger.info(f"Written {len(analysis)} dashboard analysis records to {output_file}")
     
+    # Update state (only return fields we're modifying to avoid parallel update conflicts)
     logger.info("Completed dashboard agent")
-    return state
-
+    return {
+        'dashboard_analysis': analysis
+    }

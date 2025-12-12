@@ -15,7 +15,7 @@ async def test_file_analysis_and_exploration():
     
     # Test with first file
     initial_state = AssessmentState(
-        job_id="test_combined_001",
+        job_id="test_combined_002",
         source_files=[
             {"platform": "tableau", "file_path": "input_files/tableau/metrics_homepage_metadata.xml"},
         ],

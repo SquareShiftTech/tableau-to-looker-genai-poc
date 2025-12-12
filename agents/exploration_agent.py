@@ -1,8 +1,10 @@
 """Exploration Agent - Step 1: Discover components from parsed element files."""
 import os
+import json
 from typing import Dict, Any
 from models.state import AssessmentState
 from services.llm_service import llm_service
+from config.settings import get_settings
 from utils.logger import logger
 
 
@@ -45,13 +47,19 @@ async def exploration_agent(state: AssessmentState) -> AssessmentState:
     
     logger.info(f"Processing {len(parsed_elements_paths)} parsed element files (platform: {platform})")
     
+    # Get size threshold from settings
+    settings = get_settings()
+    size_threshold = settings.chunk_max_size_bytes  # Default: 500KB
+    
     try:
-        # Load all element files into memory
+        # Load element files into memory (only files ≤ 500KB)
         element_contents: Dict[str, str] = {}
+        skipped_files = []
         
         for element_info in parsed_elements_paths:
             element_name = element_info.get('element_name')
             element_file_path = element_info.get('file_path')
+            size_bytes = element_info.get('size_bytes', 0)
             
             if not element_name or not element_file_path:
                 logger.warning(f"Invalid element info: {element_info}, skipping")
@@ -61,15 +69,33 @@ async def exploration_agent(state: AssessmentState) -> AssessmentState:
                 logger.warning(f"Element file not found: {element_file_path}, skipping")
                 continue
             
-            # Read element file content
+            # Check file size - skip files > 500KB
+            if size_bytes > size_threshold:
+                warning_msg = f"Skipping {element_name} ({size_bytes:,} bytes) - exceeds {size_threshold:,} bytes limit. Will handle with file splitting later."
+                logger.warning(warning_msg)
+                skipped_files.append({
+                    'element_name': element_name,
+                    'size_bytes': size_bytes,
+                    'reason': 'exceeds_size_limit'
+                })
+                continue
+            
+            # Read element file content (only for files ≤ 500KB)
             with open(element_file_path, 'r', encoding='utf-8') as f:
                 element_content = f.read()
             
             element_contents[element_name] = element_content
-            logger.info(f"Loaded {element_name} ({len(element_content):,} chars)")
+            logger.info(f"Loaded {element_name} ({len(element_content):,} chars, {size_bytes:,} bytes)")
+        
+        # Log skipped files summary
+        if skipped_files:
+            logger.warning(f"Skipped {len(skipped_files)} large files: {[f['element_name'] for f in skipped_files]}")
         
         if not element_contents:
-            logger.warning("No element contents loaded")
+            if skipped_files:
+                logger.warning("No element contents loaded - all files exceeded size limit")
+            else:
+                logger.warning("No element contents loaded")
             state['discovered_components'] = {}
             state['status'] = 'exploration_complete'
             return state
@@ -96,6 +122,14 @@ async def exploration_agent(state: AssessmentState) -> AssessmentState:
         logger.info(f"Discovered {len(filters)} filters")
         logger.info(f"Discovered {len(parameters)} parameters")
         logger.info(f"Discovered {len(calculations)} calculations")
+        
+        # Write discovered components to JSON file
+        if output_dir and discovered_components:
+            os.makedirs(output_dir, exist_ok=True)
+            components_file = os.path.join(output_dir, "discovered_components.json")
+            with open(components_file, 'w', encoding='utf-8') as f:
+                json.dump(discovered_components, f, indent=2)
+            logger.info(f"Written discovered components to {components_file}")
         
         # Update state
         state['discovered_components'] = discovered_components

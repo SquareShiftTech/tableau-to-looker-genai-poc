@@ -1,58 +1,117 @@
-"""Visualization Agent - Step 3b: Analyze visualizations."""
+"""Visualization Agent - Step 3b: Analyze worksheets (visualizations)."""
+import os
+import json
 from typing import List, Dict, Any
+from datetime import datetime
 from models.state import AssessmentState
-from services.llm_service import llm_service
 from services.bigquery_service import bigquery_service
-from dummy_data.sample_data import DUMMY_VISUALIZATION
 from utils.logger import logger
+
+
+def _assess_complexity(features: Dict[str, Any], dependencies: Dict[str, Any]) -> str:
+    """Assess worksheet complexity based on features and dependencies."""
+    complexity_score = 0
+    
+    # Calculations count
+    calculations_count = features.get('calculations_count', 0)
+    if calculations_count > 10:
+        complexity_score += 2
+    elif calculations_count > 5:
+        complexity_score += 1
+    
+    # Filters count
+    filters_count = features.get('filters_count', 0)
+    if filters_count > 5:
+        complexity_score += 1
+    
+    # Chart type complexity
+    chart_type = features.get('chart_type', '').lower()
+    complex_charts = ['heatmap', 'treemap', 'scatter', 'bubble', 'gantt']
+    if any(ct in chart_type for ct in complex_charts):
+        complexity_score += 1
+    
+    # Interactivity
+    interactivity = features.get('interactivity', [])
+    if len(interactivity) > 2:
+        complexity_score += 1
+    
+    # Dependencies
+    datasources_count = len(dependencies.get('datasources', []))
+    if datasources_count > 2:
+        complexity_score += 1
+    
+    if complexity_score >= 4:
+        return 'high'
+    elif complexity_score >= 2:
+        return 'medium'
+    else:
+        return 'low'
 
 
 async def visualization_agent(state: AssessmentState) -> AssessmentState:
     """
-    Visualization Agent - Analyze visualization complexity.
+    Visualization Agent - Analyze worksheet structure and complexity.
     
-    INPUT: state with parsed_visualizations
-    OUTPUT: state with visualization_analysis populated
-    WRITES: BigQuery table "visualizations_analysis"
-    
-    FUTURE LLM IMPLEMENTATION:
-    Currently uses dummy data. To implement with real LLM:
-    1. Remove DUMMY_VISUALIZATION usage
-    2. Call llm_service.analyze_visualizations(state['parsed_visualizations'])
-    3. Parse LLM response into structured format
+    INPUT: state with parsed_worksheets
+    OUTPUT: state with worksheet_analysis populated
+    WRITES: BigQuery table "worksheets"
     """
     
-    logger.info("Starting visualization agent")
+    logger.info("Starting visualization agent (worksheets)")
     
-    parsed_visualizations = state.get('parsed_visualizations', [])
-    if not parsed_visualizations:
-        logger.warning("No parsed visualizations found, skipping visualization analysis")
-        state['visualization_analysis'] = []
+    parsed_worksheets = state.get('parsed_worksheets', [])
+    if not parsed_worksheets:
+        logger.warning("No parsed worksheets found, skipping worksheet analysis")
+        state['worksheet_analysis'] = []
         state['status'] = 'analysis_complete'
         return state
     
-    # Step 1: Get data (from state or call LLM service)
-    # FUTURE: Call LLM to analyze visualizations
-    # analysis = await llm_service.analyze_visualizations(parsed_visualizations)
-    
-    # Currently using dummy data
-    analysis = DUMMY_VISUALIZATION
-    
-    # Add job_id to each analysis record
     job_id = state.get('job_id', 'unknown')
-    for record in analysis:
-        record['job_id'] = job_id
+    created_at = datetime.utcnow().isoformat() + 'Z'
     
-    logger.info(f"Analyzed {len(analysis)} visualizations")
-    logger.info(f"Chart types: {', '.join(set(a.get('chart_type', 'unknown') for a in analysis))}")
+    # Process each parsed worksheet
+    analysis: List[Dict[str, Any]] = []
     
-    # Step 2: Write to BigQuery
-    bigquery_service.insert_rows("visualizations_analysis", analysis)
+    for worksheet in parsed_worksheets:
+        worksheet_id = worksheet.get('id', '')
+        worksheet_name = worksheet.get('name', 'unnamed_worksheet')
+        features = worksheet.get('features', {})
+        dependencies = worksheet.get('dependencies', {})
+        
+        # Assess complexity
+        complexity = _assess_complexity(features, dependencies)
+        
+        # Build analysis record
+        record = {
+            'name': worksheet_name,
+            'id': worksheet_id,
+            'features': features,
+            'complexity': complexity,
+            'dependencies': dependencies,
+            'job_id': job_id,
+            'created_at': created_at
+        }
+        
+        analysis.append(record)
     
-    # Step 3: Update state
-    state['visualization_analysis'] = analysis
-    state['status'] = 'analysis_complete'
+    logger.info(f"Analyzed {len(analysis)} worksheets")
     
+    # Write to BigQuery (temporarily disabled)
+    if analysis:
+        bigquery_service.insert_rows("worksheets", analysis)
+    
+    # Write to JSON file
+    output_dir = state.get('output_dir')
+    if output_dir and analysis:
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, "worksheet_analysis.json")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(analysis, f, indent=2)
+        logger.info(f"Written {len(analysis)} worksheet analysis records to {output_file}")
+    
+    # Update state (only return fields we're modifying to avoid parallel update conflicts)
     logger.info("Completed visualization agent")
-    return state
-
+    return {
+        'worksheet_analysis': analysis,
+        'visualization_analysis': analysis  # Backward compatibility
+    }

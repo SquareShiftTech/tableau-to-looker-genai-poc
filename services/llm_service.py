@@ -231,6 +231,143 @@ File Content:
             # Re-raise instead of returning empty - let caller handle it
             raise
     
+    async def extract_components_from_element(
+        self,
+        element_name: str,
+        element_content: str,
+        platform: str
+    ) -> Dict[str, Any]:
+        """
+        Extract components from a single element file.
+        
+        Args:
+            element_name: Name of the element (e.g., "dashboards", "worksheets", "datasources")
+            element_content: Full XML content of the element (no truncation)
+            platform: BI platform name
+            
+        Returns:
+            Dict with extracted components and relationship IDs:
+            {
+                "dashboards": [...],  // If element is dashboards
+                "worksheets": [...],  // If element is worksheets
+                "datasources": [...], // If element is datasources
+                "filters": [...],     // If element contains filters
+                "parameters": [...],  // If element contains parameters
+                "calculations": [...] // If element contains calculations
+            }
+        """
+        logger.info(f"Extracting components from {element_name} element ({len(element_content):,} chars)")
+        
+        # Build generic discovery prompt
+        prompt = self._build_element_extraction_prompt(element_name, element_content, platform)
+        
+        try:
+            logger.info(f"Calling Gemini to extract components from {element_name}...")
+            response = self.model.generate_content(prompt)
+            
+            if not response or not response.text:
+                logger.error(f"Gemini returned empty response for {element_name}")
+                return {}
+            
+            result_text = response.text
+            logger.info(f"Received response from Gemini for {element_name}: {len(result_text):,} characters")
+            
+            # Extract JSON from response
+            result_text = self._extract_json(result_text)
+            components = json.loads(result_text)
+            
+            # Count extracted components
+            total_components = sum(
+                len(v) if isinstance(v, list) else 0 
+                for v in components.values()
+            )
+            logger.info(f"Extracted {total_components} components from {element_name}")
+            
+            return components
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from Gemini response for {element_name}: {e}")
+            logger.error(f"Response text (first 1000 chars): {result_text[:1000] if 'result_text' in locals() else 'N/A'}")
+            return {}  # Return empty dict on error, don't fail entire process
+        except Exception as e:
+            logger.error(f"Error extracting components from {element_name}: {e}", exc_info=True)
+            return {}  # Return empty dict on error, don't fail entire process
+    
+    def _build_element_extraction_prompt(
+        self,
+        element_name: str,
+        element_content: str,
+        platform: str
+    ) -> str:
+        """
+        Build generic prompt for component discovery.
+        
+        This is a simple discovery prompt - it asks the LLM to identify components
+        (id, name) and their relationships. Detailed extraction happens in Parsing Agent.
+        
+        Args:
+            element_name: Name of the element (e.g., "dashboards", "worksheets")
+            element_content: XML content of the element
+            platform: BI platform name
+            
+        Returns:
+            Formatted prompt string
+        """
+        prompt = f"""You are analyzing {platform.upper()} workbook XML to discover components and their relationships.
+
+You have been provided with the {element_name.upper()} element from the workbook:
+
+{element_content}
+
+Your task is to DISCOVER what components exist in this element and identify their relationships.
+
+For each component you find, extract:
+- id (unique identifier)
+- name
+- relationships (list of IDs/names of other components this references)
+
+Component types you might find:
+- dashboards
+- worksheets  
+- datasources
+- filters
+- parameters
+- calculations
+
+IMPORTANT: 
+- Let the XML structure guide you - discover what's actually there
+- Focus on relationships - which components reference which other components
+- Keep it simple - just id, name, and relationship IDs
+- Don't extract detailed properties (formulas, connection strings, etc.) - that's for later
+
+Return valid JSON only (no markdown formatting). Use this structure:
+
+{{
+    "dashboards": [
+        {{"id": "...", "name": "...", "worksheets": [...], "filters": [...], "parameters": [...]}}
+    ],
+    "worksheets": [
+        {{"id": "...", "name": "...", "datasources": [...], "calculations": [...], "filters": [...]}}
+    ],
+    "datasources": [
+        {{"id": "...", "name": "...", "calculations": [...]}}
+    ],
+    "filters": [
+        {{"id": "...", "name": "...", "related_dashboards": [...], "related_worksheets": [...]}}
+    ],
+    "parameters": [
+        {{"id": "...", "name": "...", "related_dashboards": [...]}}
+    ],
+    "calculations": [
+        {{"id": "...", "name": "...", "related_worksheets": [...], "related_datasources": [...]}}
+    ]
+}}
+
+Only include component types that actually exist in this element. Omit empty arrays.
+"""
+        
+        return prompt
+    
     async def extract_component_catalog(
         self,
         element_contents: Dict[str, str],
@@ -238,10 +375,10 @@ File Content:
         output_dir: str
     ) -> Dict[str, Any]:
         """
-        Extract component catalog from parsed element files using LLM.
+        Extract component catalog by processing each element separately.
         
-        This method takes the parsed element XML files (one per first-level element type)
-        and uses the LLM to extract a structured catalog of all components and their relationships.
+        This method processes each element file sequentially with individual LLM calls,
+        then merges all results into a single component catalog.
         
         Args:
             element_contents: Dict mapping element_name -> XML content (e.g., {"datasources": "<datasources>...</datasources>"})
@@ -261,174 +398,53 @@ File Content:
         """
         logger.info(f"Extracting component catalog from {len(element_contents)} element files for {platform}")
         
-        # Truncate each element content if too large (keep first 50KB per element)
-        max_per_element = 50000
-        truncated_contents = {}
-        for element_name, content in element_contents.items():
-            if len(content) > max_per_element:
-                logger.warning(f"Element '{element_name}' is large ({len(content):,} chars), truncating to {max_per_element:,}")
-                truncated_contents[element_name] = content[:max_per_element] + "\n\n[Note: Content truncated for analysis]"
-            else:
-                truncated_contents[element_name] = content
+        # Initialize merged catalog
+        merged_catalog = {
+            "dashboards": [],
+            "worksheets": [],
+            "datasources": [],
+            "filters": [],
+            "parameters": [],
+            "calculations": []
+        }
         
-        # Build prompt with detailed instructions
-        element_sections = []
-        for element_name, content in truncated_contents.items():
-            element_sections.append(f"""
-=== {element_name.upper()} ===
-{content}
-""")
+        # Process each element sequentially
+        for element_name, element_content in element_contents.items():
+            logger.info(f"Processing element: {element_name}")
+            
+            try:
+                result = await self.extract_components_from_element(
+                    element_name, element_content, platform
+                )
+                
+                # Merge results into catalog
+                for component_type in merged_catalog.keys():
+                    if component_type in result and isinstance(result[component_type], list):
+                        merged_catalog[component_type].extend(result[component_type])
+                        logger.info(f"  Added {len(result[component_type])} {component_type} from {element_name}")
+                
+            except Exception as e:
+                logger.error(f"Error processing element {element_name}: {e}", exc_info=True)
+                # Continue with other elements even if one fails
+                continue
         
-        prompt = f"""You are analyzing {platform.upper()} workbook XML to extract component relationships for Looker migration assessment.
-
-You have been provided with the following XML element files:
-
-{''.join(element_sections)}
-
-For each element type, extract:
-
-1. DASHBOARDS:
-   - id, name, title
-   - worksheets used (list of worksheet IDs)
-   - filters applied (list of filter IDs)
-   - parameters (list of parameter IDs)
-   - calculations referenced (list of calculation IDs)
-
-2. WORKSHEETS:
-   - id, name
-   - type (bar_chart, line_chart, pie_chart, table, map, scatter_plot, etc.)
-   - datasources used (list of datasource IDs)
-   - calculations (list of calculation IDs)
-   - filters applied (list of filter IDs)
-
-3. DATASOURCES:
-   - id, name
-   - type (bigquery, sql_server, postgresql, excel, etc.)
-   - connection details, connection string
-   - calculations defined (list of calculation IDs)
-
-4. FILTERS:
-   - id, name
-   - datatype (dimension, measure, date, etc.)
-   - related dashboards (list of dashboard IDs)
-   - related worksheets (list of worksheet IDs)
-
-5. PARAMETERS:
-   - id, name
-   - datatype (string, number, date, boolean, etc.)
-   - default value
-   - related dashboards (list of dashboard IDs)
-
-6. CALCULATIONS:
-   - id, name
-   - formula/expression
-   - related worksheets (list of worksheet IDs)
-   - related datasources (list of datasource IDs)
-
-CRITICAL: Focus on RELATIONSHIPS - which dashboard uses which worksheets, which worksheets use which datasources, etc.
-These relationships are essential for Looker migration complexity assessment.
-
-Return valid JSON only (no markdown formatting). Use this structure:
-
-{{
-    "dashboards": [
-        {{
-            "id": "dash_1",
-            "name": "Sales Dashboard",
-            "worksheets": ["sheet_1", "sheet_2"],
-            "filters": ["filter_1"],
-            "parameters": ["param_1"]
-        }}
-    ],
-    "worksheets": [
-        {{
-            "id": "sheet_1",
-            "name": "Sales Chart",
-            "type": "bar_chart",
-            "datasources": ["ds_1"],
-            "calculations": ["calc_1"],
-            "filters": ["filter_1"]
-        }}
-    ],
-    "datasources": [
-        {{
-            "id": "ds_1",
-            "name": "Sales DB",
-            "type": "bigquery",
-            "connection_string": "...",
-            "calculations": ["calc_1"]
-        }}
-    ],
-    "filters": [
-        {{
-            "id": "filter_1",
-            "name": "Region Filter",
-            "type": "dimension",
-            "related_dashboards": ["dash_1"],
-            "related_worksheets": ["sheet_1"]
-        }}
-    ],
-    "parameters": [
-        {{
-            "id": "param_1",
-            "name": "Date Range",
-            "type": "date",
-            "default_value": "...",
-            "related_dashboards": ["dash_1"]
-        }}
-    ],
-    "calculations": [
-        {{
-            "id": "calc_1",
-            "name": "Profit Margin",
-            "formula": "[Profit]/[Sales]",
-            "related_worksheets": ["sheet_1"],
-            "related_datasources": ["ds_1"]
-        }}
-    ]
-}}
-"""
+        # Log summary
+        dashboards = merged_catalog.get('dashboards', [])
+        worksheets = merged_catalog.get('worksheets', [])
+        datasources = merged_catalog.get('datasources', [])
+        filters = merged_catalog.get('filters', [])
+        parameters = merged_catalog.get('parameters', [])
+        calculations = merged_catalog.get('calculations', [])
         
-        try:
-            logger.info("Calling Gemini to extract component catalog...")
-            response = self.model.generate_content(prompt)
-            
-            if not response or not response.text:
-                logger.error("Gemini returned empty response")
-                raise ValueError("Empty response from Gemini")
-            
-            result_text = response.text
-            logger.info(f"Received response from Gemini: {len(result_text):,} characters")
-            
-            # Extract JSON from response
-            result_text = self._extract_json(result_text)
-            discovered_components = json.loads(result_text)
-            
-            # Log what was discovered
-            dashboards = discovered_components.get('dashboards', [])
-            worksheets = discovered_components.get('worksheets', [])
-            datasources = discovered_components.get('datasources', [])
-            filters = discovered_components.get('filters', [])
-            parameters = discovered_components.get('parameters', [])
-            calculations = discovered_components.get('calculations', [])
-            
-            logger.info(f"Successfully extracted component catalog:")
-            logger.info(f"  - Dashboards: {len(dashboards)}")
-            logger.info(f"  - Worksheets: {len(worksheets)}")
-            logger.info(f"  - Data Sources: {len(datasources)}")
-            logger.info(f"  - Filters: {len(filters)}")
-            logger.info(f"  - Parameters: {len(parameters)}")
-            logger.info(f"  - Calculations: {len(calculations)}")
-            
-            return discovered_components
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from Gemini response: {e}")
-            logger.error(f"Response text (first 1000 chars): {result_text[:1000] if 'result_text' in locals() else 'N/A'}")
-            raise
-        except Exception as e:
-            logger.error(f"Error extracting component catalog: {e}", exc_info=True)
-            raise
+        logger.info(f"Successfully extracted component catalog:")
+        logger.info(f"  - Dashboards: {len(dashboards)}")
+        logger.info(f"  - Worksheets: {len(worksheets)}")
+        logger.info(f"  - Data Sources: {len(datasources)}")
+        logger.info(f"  - Filters: {len(filters)}")
+        logger.info(f"  - Parameters: {len(parameters)}")
+        logger.info(f"  - Calculations: {len(calculations)}")
+        
+        return merged_catalog
     
     def _build_strategy_based_prompt(
         self,

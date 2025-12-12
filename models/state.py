@@ -26,6 +26,8 @@ class AssessmentState(TypedDict):
     parsed_dashboards: Optional[List[Dict[str, Any]]]
     parsed_visualizations: Optional[List[Dict[str, Any]]]
     parsed_datasources: Optional[List[Dict[str, Any]]]
+    parsed_worksheets: Optional[List[Dict[str, Any]]]
+    parsed_calculations: Optional[List[Dict[str, Any]]]
     
     # Step 3: Specialized Agent Outputs
     calculation_analysis: Optional[List[Dict[str, Any]]]

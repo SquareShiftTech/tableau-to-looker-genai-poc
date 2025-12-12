@@ -1,10 +1,11 @@
-"""Parsing Agent - Step 2: Create dashboard assessment files."""
+"""Parsing Agent - Step 2: Extract detailed properties from components."""
 import os
 import json
 import re
 from typing import Dict, Any, List, Optional
 from models.state import AssessmentState
 from utils.logger import logger
+from utils.xml_utils import read_xml_element
 
 
 def _sanitize_filename(name: str) -> str:
@@ -16,29 +17,37 @@ def _sanitize_filename(name: str) -> str:
     return sanitized[:100]  # Limit length
 
 
-def _find_component_by_id(components: List[Dict[str, Any]], component_id: str) -> Optional[Dict[str, Any]]:
-    """Find a component by its ID."""
-    for component in components:
-        if component.get('id') == component_id:
-            return component
-    return None
+def _extract_workbook_name(source_files: List[Dict[str, str]]) -> str:
+    """Extract workbook name from source files."""
+    if not source_files:
+        return "unknown_workbook"
+    
+    first_file = source_files[0]
+    file_path = first_file.get('file_path', '')
+    
+    if not file_path:
+        return "unknown_workbook"
+    
+    # Extract workbook name from file path
+    basename = os.path.basename(file_path)
+    # Remove extensions
+    workbook_name = basename.replace('.twb', '').replace('.twbx', '').replace('.xml', '')
+    
+    return workbook_name or "unknown_workbook"
 
 
 async def parsing_agent(state: AssessmentState) -> AssessmentState:
     """
-    Parsing Agent - Create one file per dashboard with all related elements for assessment.
+    Parsing Agent - Extract detailed properties from component index.
     
     INPUT: state with discovered_components (component catalog from Exploration Agent)
-    OUTPUT: state with parsed_dashboards populated
-    WRITES: output/{job_id}/assessments/dashboard_{name}.json (one file per dashboard)
+    OUTPUT: state with parsed_dashboards, parsed_worksheets, parsed_datasources, parsed_calculations populated
     
     Process:
-    1. Read discovered_components from state (component catalog)
-    2. For each dashboard in catalog:
-       - Get dashboard details
-       - Resolve related worksheets, datasources, filters, parameters, calculations
-       - Extract only assessment-relevant properties
-       - Save to output/{job_id}/assessments/dashboard_{name}.json
+    1. Extract workbook_name from source_files
+    2. Read XML files for detailed extraction based on component index
+    3. Extract detailed properties: features, formulas, connection details, interactivity
+    4. Store parsed data in state
     """
     
     logger.info("Starting parsing agent")
@@ -46,239 +55,307 @@ async def parsing_agent(state: AssessmentState) -> AssessmentState:
     discovered_components = state.get('discovered_components', {})
     if not discovered_components:
         logger.warning("No discovered components found, skipping parsing")
+        state['parsed_dashboards'] = []
+        state['parsed_worksheets'] = []
+        state['parsed_datasources'] = []
+        state['parsed_calculations'] = []
         state['status'] = 'parsing_complete'
         return state
     
-    output_dir = state.get('output_dir')
-    if not output_dir:
-        logger.warning("No output directory found, skipping file creation")
-        state['status'] = 'parsing_complete'
-        return state
+    # Extract workbook_name
+    source_files = state.get('source_files', [])
+    workbook_name = _extract_workbook_name(source_files)
+    logger.info(f"Extracted workbook_name: {workbook_name}")
     
-    # Create assessments directory
-    assessments_dir = os.path.join(output_dir, 'assessments')
-    os.makedirs(assessments_dir, exist_ok=True)
-    logger.info(f"Created assessments directory: {assessments_dir}")
+    # Get parsed element paths for reading XML files
+    parsed_elements_paths = state.get('parsed_elements_paths', [])
+    elements_map = {e.get('element_name'): e.get('file_path') for e in parsed_elements_paths if e.get('file_path')}
     
     # Get component catalog
-    dashboards = discovered_components.get('dashboards', [])
-    worksheets = discovered_components.get('worksheets', [])
-    datasources = discovered_components.get('datasources', [])
-    filters = discovered_components.get('filters', [])
-    parameters = discovered_components.get('parameters', [])
-    calculations = discovered_components.get('calculations', [])
+    dashboards_index = discovered_components.get('dashboards', [])
+    worksheets_index = discovered_components.get('worksheets', [])
+    datasources_index = discovered_components.get('datasources', [])
+    calculations_index = discovered_components.get('calculations', [])
+    filters_index = discovered_components.get('filters', [])
+    parameters_index = discovered_components.get('parameters', [])
     
     # Create index maps for quick lookup
-    worksheets_map = {w.get('id'): w for w in worksheets if w.get('id')}
-    datasources_map = {ds.get('id'): ds for ds in datasources if ds.get('id')}
-    filters_map = {f.get('id'): f for f in filters if f.get('id')}
-    parameters_map = {p.get('id'): p for p in parameters if p.get('id')}
-    calculations_map = {c.get('id'): c for c in calculations if c.get('id')}
+    worksheets_map = {w.get('id'): w for w in worksheets_index if w.get('id')}
+    datasources_map = {ds.get('id'): ds for ds in datasources_index if ds.get('id')}
+    filters_map = {f.get('id'): f for f in filters_index if f.get('id')}
+    parameters_map = {p.get('id'): p for p in parameters_index if p.get('id')}
+    calculations_map = {c.get('id'): c for c in calculations_index if c.get('id')}
     
+    # Parse dashboards
     parsed_dashboards: List[Dict[str, Any]] = []
-    
-    # Process each dashboard
-    for dashboard in dashboards:
-        dashboard_id = dashboard.get('id')
-        dashboard_name = dashboard.get('name', 'unnamed_dashboard')
+    for dashboard_idx in dashboards_index:
+        dashboard_id = dashboard_idx.get('id')
+        dashboard_name = dashboard_idx.get('name', 'unnamed_dashboard')
         
         logger.info(f"Processing dashboard: {dashboard_name} (id: {dashboard_id})")
         
-        # Resolve related worksheets
-        worksheet_ids = dashboard.get('worksheets', [])
-        related_worksheets = []
-        for ws_id in worksheet_ids:
-            ws = worksheets_map.get(ws_id)
-            if ws:
-                # Extract assessment-relevant properties only
-                related_worksheets.append({
-                    'id': ws.get('id'),
-                    'name': ws.get('name'),
-                    'type': ws.get('type'),
-                    'calculations_count': len(ws.get('calculations', [])),
-                    'filters_count': len(ws.get('filters', [])),
-                    'datasources_count': len(ws.get('datasources', []))
-                })
+        # Resolve dependencies
+        worksheet_ids = dashboard_idx.get('worksheets', [])
+        filter_ids = dashboard_idx.get('filters', [])
+        parameter_ids = dashboard_idx.get('parameters', [])
         
-        # Resolve related datasources (from worksheets)
+        # Get related datasources from worksheets
         datasource_ids = set()
         for ws_id in worksheet_ids:
             ws = worksheets_map.get(ws_id)
             if ws:
                 datasource_ids.update(ws.get('datasources', []))
         
-        related_datasources = []
-        for ds_id in datasource_ids:
-            ds = datasources_map.get(ds_id)
-            if ds:
-                related_datasources.append({
-                    'id': ds.get('id'),
-                    'name': ds.get('name'),
-                    'type': ds.get('type'),
-                    'calculations_count': len(ds.get('calculations', []))
-                })
-        
-        # Resolve related filters
-        filter_ids = dashboard.get('filters', [])
-        related_filters = []
-        for f_id in filter_ids:
-            f = filters_map.get(f_id)
-            if f:
-                related_filters.append({
-                    'id': f.get('id'),
-                    'name': f.get('name'),
-                    'type': f.get('type', f.get('datatype'))
-                })
-        
-        # Resolve related parameters
-        parameter_ids = dashboard.get('parameters', [])
-        related_parameters = []
-        for p_id in parameter_ids:
-            p = parameters_map.get(p_id)
-            if p:
-                related_parameters.append({
-                    'id': p.get('id'),
-                    'name': p.get('name'),
-                    'type': p.get('type', p.get('datatype')),
-                    'default_value': p.get('default_value')
-                })
-        
-        # Resolve related calculations (from worksheets)
+        # Get related calculations from worksheets
         calculation_ids = set()
         for ws_id in worksheet_ids:
             ws = worksheets_map.get(ws_id)
             if ws:
                 calculation_ids.update(ws.get('calculations', []))
         
-        related_calculations = []
-        for calc_id in calculation_ids:
-            calc = calculations_map.get(calc_id)
-            if calc:
-                related_calculations.append({
-                    'id': calc.get('id'),
-                    'name': calc.get('name'),
-                    'formula': calc.get('formula', calc.get('expression'))
-                })
-        
-        # Build assessment file structure
-        assessment_data = {
-            'dashboard': {
-                'id': dashboard_id,
-                'name': dashboard_name,
-                'title': dashboard.get('title', dashboard_name),
-                'filters_count': len(related_filters),
-                'interactivity': [],
-                'charts_count': len(related_worksheets)
-            },
-            'related_worksheets': related_worksheets,
-            'related_datasources': related_datasources,
-            'filters': related_filters,
-            'parameters': related_parameters,
-            'calculations': related_calculations,
-            'migration_complexity': {
-                'overall': _assess_complexity(related_worksheets, related_calculations, related_filters),
-                'factors': _identify_complexity_factors(related_worksheets, related_calculations, related_filters)
-            }
+        # Build features
+        features = {
+            'layout': 'multi_sheet' if len(worksheet_ids) > 1 else 'single_sheet',
+            'filters_count': len(filter_ids),
+            'interactivity': []
         }
         
-        # Add interactivity indicators
-        if related_parameters:
-            assessment_data['dashboard']['interactivity'].append('parameters')
-        if len(related_filters) > 0:
-            assessment_data['dashboard']['interactivity'].append('filters')
-        if len(related_worksheets) > 1:
-            assessment_data['dashboard']['interactivity'].append('multi_sheet')
+        if parameter_ids:
+            features['interactivity'].append('parameters')
+        if filter_ids:
+            features['interactivity'].append('filters')
+        if len(worksheet_ids) > 1:
+            features['interactivity'].append('multi_sheet')
         
-        # Save to file
-        sanitized_name = _sanitize_filename(dashboard_name)
-        assessment_file = os.path.join(assessments_dir, f"dashboard_{sanitized_name}.json")
+        features['charts_count'] = len(worksheet_ids)
         
-        with open(assessment_file, 'w', encoding='utf-8') as f:
-            json.dump(assessment_data, f, indent=2)
+        # Build dependencies
+        dependencies = {
+            'worksheets': worksheet_ids,
+            'datasources': list(datasource_ids),
+            'filters': filter_ids,
+            'parameters': parameter_ids
+        }
         
-        logger.info(f"Saved assessment file: {assessment_file}")
-        
-        # Add to parsed dashboards list
         parsed_dashboards.append({
+            'workbook_name': workbook_name,
             'id': dashboard_id,
             'name': dashboard_name,
-            'assessment_file': assessment_file,
-            'complexity': assessment_data['migration_complexity']['overall']
+            'features': features,
+            'dependencies': dependencies
         })
+    
+    # Parse worksheets
+    parsed_worksheets: List[Dict[str, Any]] = []
+    for worksheet_idx in worksheets_index:
+        worksheet_id = worksheet_idx.get('id')
+        worksheet_name = worksheet_idx.get('name', 'unnamed_worksheet')
+        
+        logger.info(f"Processing worksheet: {worksheet_name} (id: {worksheet_id})")
+        
+        # Get dependencies
+        datasource_ids = worksheet_idx.get('datasources', [])
+        calculation_ids = worksheet_idx.get('calculations', [])
+        filter_ids = worksheet_idx.get('filters', [])
+        
+        # Build features (basic - can be enhanced with LLM later)
+        features = {
+            'chart_type': worksheet_idx.get('type', 'unknown'),
+            'calculations_count': len(calculation_ids),
+            'filters_count': len(filter_ids),
+            'interactivity': []
+        }
+        
+        if filter_ids:
+            features['interactivity'].append('filters')
+        if calculation_ids:
+            features['interactivity'].append('calculations')
+        
+        # Build dependencies
+        dependencies = {
+            'datasources': datasource_ids,
+            'calculations': calculation_ids,
+            'filters': filter_ids
+        }
+        
+        parsed_worksheets.append({
+            'id': worksheet_id,
+            'name': worksheet_name,
+            'features': features,
+            'dependencies': dependencies
+        })
+    
+    # Parse datasources
+    parsed_datasources: List[Dict[str, Any]] = []
+    datasources_file = elements_map.get('datasources')
+    
+    for datasource_idx in datasources_index:
+        datasource_id = datasource_idx.get('id')
+        datasource_name = datasource_idx.get('name', 'unnamed_datasource')
+        
+        logger.info(f"Processing datasource: {datasource_name} (id: {datasource_id})")
+        
+        # Try to read XML to extract type and connection details
+        connection_details = {}
+        datasource_type = 'unknown'
+        
+        if datasources_file and os.path.exists(datasources_file):
+            try:
+                # Read datasource XML section
+                datasource_xml = read_xml_element(datasources_file, 'datasource')
+                if datasource_xml:
+                    # Try to extract type from XML (basic parsing)
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(f"<root>{datasource_xml}</root>")
+                    
+                    # Look for connection elements
+                    for conn in root.findall('.//connection'):
+                        conn_class = conn.get('class', '')
+                        if 'bigquery' in conn_class.lower():
+                            datasource_type = 'bigquery'
+                            connection_details['project'] = conn.get('project', '')
+                            connection_details['dataset'] = conn.get('schema', '')
+                        elif 'sql' in conn_class.lower():
+                            datasource_type = 'sql'
+                            connection_details['server'] = conn.get('server', '')
+                            connection_details['database'] = conn.get('dbname', '')
+                        elif 'hyper' in conn_class.lower():
+                            datasource_type = 'hyper'
+                            connection_details['dbname'] = conn.get('dbname', '')
+                        break
+            except Exception as e:
+                logger.warning(f"Error extracting datasource details for {datasource_name}: {e}")
+        
+        # Assess complexity (basic rule-based)
+        complexity = 'low'
+        calculation_count = len(datasource_idx.get('calculations', []))
+        if calculation_count > 10:
+            complexity = 'high'
+        elif calculation_count > 5:
+            complexity = 'medium'
+        
+        parsed_datasources.append({
+            'id': datasource_id,
+            'name': datasource_name,
+            'type': datasource_type,
+            'connection': connection_details,
+            'complexity': complexity
+        })
+    
+    # Parse calculations
+    parsed_calculations: List[Dict[str, Any]] = []
+    
+    for calc_idx in calculations_index:
+        calc_id = calc_idx.get('id')
+        calc_name = calc_idx.get('name', 'unnamed_calculation')
+        
+        logger.info(f"Processing calculation: {calc_name} (id: {calc_id})")
+        
+        # Get datasource_id from relationships
+        datasource_ids = calc_idx.get('related_datasources', [])
+        datasource_id = datasource_ids[0] if datasource_ids else 'unknown'
+        
+        # Try to extract formula from XML
+        formula = calc_idx.get('formula', calc_idx.get('expression', ''))
+        
+        # If no formula in index, extract from XML files
+        if not formula:
+            # Look for calculation in datasources XML (calculations are in <column> elements with <calculation> children)
+            datasources_file = elements_map.get('datasources')
+            if datasources_file and os.path.exists(datasources_file):
+                try:
+                    import xml.etree.ElementTree as ET
+                    tree = ET.parse(datasources_file)
+                    root = tree.getroot()
+                    
+                    # Match by calculation ID (e.g., "[Calculation_14496010743898134]")
+                    # The ID from discovered_components should match the column name attribute
+                    for column in root.findall('.//column'):
+                        column_name = column.get('name', '')
+                        column_caption = column.get('caption', '')
+                        
+                        # Check if this column matches our calculation
+                        # Priority: 1) Match by ID (column name), 2) Match by name (column caption)
+                        matches = False
+                        if calc_id:
+                            # Remove brackets for comparison if needed
+                            calc_id_clean = calc_id.strip('[]')
+                            column_name_clean = column_name.strip('[]')
+                            if calc_id == column_name or calc_id_clean in column_name_clean or calc_id in column_name:
+                                matches = True
+                        
+                        if not matches and calc_name:
+                            # Match by caption (the display name)
+                            if calc_name == column_caption:
+                                matches = True
+                        
+                        if matches:
+                            # Find the calculation child element
+                            calc_elem = column.find('.//calculation')
+                            if calc_elem is not None:
+                                formula = calc_elem.get('formula', '')
+                                if formula:
+                                    logger.debug(f"Found formula for {calc_name} (id: {calc_id}): {formula[:100]}...")
+                                    break
+                except Exception as e:
+                    logger.warning(f"Error extracting formula from datasources XML for {calc_name} (id: {calc_id}): {e}")
+        
+        # Assess complexity based on formula
+        complexity = 'low'
+        if formula:
+            formula_lower = formula.lower()
+            if any(keyword in formula_lower for keyword in ['window_', 'lod', 'table_calc', 'rank', 'running_', 'lookup']):
+                complexity = 'high'
+            elif any(keyword in formula_lower for keyword in ['if', 'case', 'sum', 'avg', 'count']):
+                complexity = 'medium'
+        
+        parsed_calculations.append({
+            'datasource_id': datasource_id,
+            'field_name': calc_name,
+            'formula': formula,
+            'complexity': complexity
+        })
+    
+    # Write parsed data to JSON files
+    output_dir = state.get('output_dir')
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        
+        if parsed_dashboards:
+            dashboards_file = os.path.join(output_dir, "parsed_dashboards.json")
+            with open(dashboards_file, 'w', encoding='utf-8') as f:
+                json.dump(parsed_dashboards, f, indent=2)
+            logger.info(f"Written {len(parsed_dashboards)} parsed dashboards to {dashboards_file}")
+        
+        if parsed_worksheets:
+            worksheets_file = os.path.join(output_dir, "parsed_worksheets.json")
+            with open(worksheets_file, 'w', encoding='utf-8') as f:
+                json.dump(parsed_worksheets, f, indent=2)
+            logger.info(f"Written {len(parsed_worksheets)} parsed worksheets to {worksheets_file}")
+        
+        if parsed_datasources:
+            datasources_file = os.path.join(output_dir, "parsed_datasources.json")
+            with open(datasources_file, 'w', encoding='utf-8') as f:
+                json.dump(parsed_datasources, f, indent=2)
+            logger.info(f"Written {len(parsed_datasources)} parsed datasources to {datasources_file}")
+        
+        if parsed_calculations:
+            calculations_file = os.path.join(output_dir, "parsed_calculations.json")
+            with open(calculations_file, 'w', encoding='utf-8') as f:
+                json.dump(parsed_calculations, f, indent=2)
+            logger.info(f"Written {len(parsed_calculations)} parsed calculations to {calculations_file}")
     
     # Update state
     state['parsed_dashboards'] = parsed_dashboards
+    state['parsed_worksheets'] = parsed_worksheets
+    state['parsed_datasources'] = parsed_datasources
+    state['parsed_calculations'] = parsed_calculations
     state['status'] = 'parsing_complete'
     
-    logger.info(f"Completed parsing agent - created {len(parsed_dashboards)} dashboard assessment files")
+    logger.info(f"Completed parsing agent:")
+    logger.info(f"  - Parsed {len(parsed_dashboards)} dashboards")
+    logger.info(f"  - Parsed {len(parsed_worksheets)} worksheets")
+    logger.info(f"  - Parsed {len(parsed_datasources)} datasources")
+    logger.info(f"  - Parsed {len(parsed_calculations)} calculations")
+    
     return state
-
-
-def _assess_complexity(
-    worksheets: List[Dict[str, Any]],
-    calculations: List[Dict[str, Any]],
-    filters: List[Dict[str, Any]]
-) -> str:
-    """Assess overall migration complexity."""
-    complexity_score = 0
-    
-    # Worksheets complexity
-    if len(worksheets) > 5:
-        complexity_score += 2
-    elif len(worksheets) > 2:
-        complexity_score += 1
-    
-    # Calculations complexity
-    if len(calculations) > 10:
-        complexity_score += 2
-    elif len(calculations) > 5:
-        complexity_score += 1
-    
-    # Filters complexity
-    if len(filters) > 5:
-        complexity_score += 1
-    
-    # Check for complex calculation formulas
-    for calc in calculations:
-        formula = calc.get('formula', '')
-        if any(keyword in formula.lower() for keyword in ['window_', 'lod', 'table_calc', 'rank', 'running_']):
-            complexity_score += 1
-            break
-    
-    if complexity_score >= 4:
-        return 'high'
-    elif complexity_score >= 2:
-        return 'medium'
-    else:
-        return 'low'
-
-
-def _identify_complexity_factors(
-    worksheets: List[Dict[str, Any]],
-    calculations: List[Dict[str, Any]],
-    filters: List[Dict[str, Any]]
-) -> List[str]:
-    """Identify specific complexity factors."""
-    factors = []
-    
-    if len(worksheets) > 5:
-        factors.append('many_worksheets')
-    
-    if len(calculations) > 10:
-        factors.append('many_calculations')
-    
-    if len(filters) > 5:
-        factors.append('many_filters')
-    
-    # Check for complex calculations
-    for calc in calculations:
-        formula = calc.get('formula', '')
-        if 'window_' in formula.lower():
-            factors.append('window_functions')
-            break
-        if 'lod' in formula.lower():
-            factors.append('lod_expressions')
-            break
-    
-    return factors
-
