@@ -1,0 +1,223 @@
+{
+  "tableau": {
+    "dashboard": {
+      "standard_features": [
+        "filters",
+        "worksheets_used",
+        "interactivity",
+        "layout",
+        "parameters"
+      ],
+      "parsing_guidance": {
+        "filters": "Extract all <filter> elements within <dashboard>",
+        "worksheets_used": "Find <worksheet> references in <zone> elements",
+        "interactivity": "Check for <action> elements and their types",
+        "layout": "Extract <zone> structure and positioning",
+        "parameters": "Find <parameter> references used in dashboard"
+      }
+    },
+    "worksheet": {
+      "standard_features": [
+        "chart_type",
+        "data_fields",
+        "filters",
+        "calculations",
+        "interactivity"
+      ],
+      "parsing_guidance": {
+        "chart_type": "Extract <view> element's type attribute or <mark> class attribute",
+        "data_fields": "Find all <column> elements in <columns> section or <rows>/<cols> elements",
+        "filters": "Extract <filter> elements and their expressions",
+        "calculations": "Find <calculation> elements with formula attributes",
+        "interactivity": "Check for <action> elements"
+      }
+    },
+    "datasource": {
+      "standard_features": [
+        "connection_type",
+        "tables",
+        "fields",
+        "connection_string"
+      ],
+      "parsing_guidance": {
+        "connection_type": "Extract <connection> element's class attribute",
+        "tables": "Find all <table> or <relation> elements and their names",
+        "fields": "Extract <column> or <metadata-record> elements with name and type",
+        "connection_string": "Extract <connection> element's server, dbname, project, schema attributes"
+      }
+    },
+    "calculation": {
+      "standard_features": [
+        "formula",
+        "data_type",
+        "aggregation"
+      ],
+      "parsing_guidance": {
+        "formula": "Extract <calculation> element's formula attribute",
+        "data_type": "Get <column> element's type or datatype attribute",
+        "aggregation": "Check if formula contains aggregation functions or <column-instance> derivation attribute"
+      }
+    },
+    "filter": {
+      "standard_features": [
+        "type",
+        "field",
+        "expression",
+        "scope"
+      ],
+      "parsing_guidance": {
+        "type": "Extract <filter> element's type attribute",
+        "field": "Extract <filter> element's field attribute",
+        "expression": "Extract filter expression or condition",
+        "scope": "Determine if filter applies to worksheet, dashboard, or global"
+      }
+    },
+    "parameter": {
+      "standard_features": [
+        "type",
+        "data_type",
+        "default_value",
+        "allowed_values"
+      ],
+      "parsing_guidance": {
+        "type": "Extract <parameter> element's type attribute",
+        "data_type": "Extract <parameter> element's datatype attribute",
+        "default_value": "Extract default parameter value",
+        "allowed_values": "Extract list of allowed values if restricted"
+      }
+    }
+  },
+  "cognos": {
+    "report": {
+      "standard_features": [
+        "measures",
+        "dimensions",
+        "filters",
+        "parameters",
+        "queries"
+      ],
+      "parsing_guidance": {
+        "measures": "Extract <item> elements with type='measure'",
+        "dimensions": "Extract <item> elements with type='dimension'",
+        "filters": "Extract filter definitions from report metadata",
+        "parameters": "Extract parameter definitions",
+        "queries": "Extract query definitions"
+      }
+    },
+    "metric": {
+      "standard_features": [
+        "expression",
+        "data_type",
+        "aggregation",
+        "format"
+      ],
+      "parsing_guidance": {
+        "expression": "Extract <expression> element content",
+        "data_type": "Extract <item> element's type attribute",
+        "aggregation": "Check expression for aggregation functions",
+        "format": "Extract format attributes"
+      }
+    },
+    "datasource": {
+      "standard_features": [
+        "connection_type",
+        "query_definition",
+        "tables",
+        "fields"
+      ],
+      "parsing_guidance": {
+        "connection_type": "Extract <connection> element's type attribute",
+        "query_definition": "Extract query SQL or definition",
+        "tables": "Find all <table> elements",
+        "fields": "Extract <item> elements from metadata"
+      }
+    }
+  },
+  "microstrategy": {
+    "report": {
+      "standard_features": [
+        "attributes",
+        "metrics",
+        "filters",
+        "prompts",
+        "layout"
+      ],
+      "parsing_guidance": {
+        "attributes": "Extract <template_unit> elements with type='attribute'",
+        "metrics": "Extract <template_unit> elements with type='metric'",
+        "filters": "Extract filter definitions",
+        "prompts": "Extract prompt definitions",
+        "layout": "Extract layout structure from <layout> element"
+      }
+    },
+    "metric": {
+      "standard_features": [
+        "formula",
+        "data_type",
+        "aggregation",
+        "format"
+      ],
+      "parsing_guidance": {
+        "formula": "Extract <formula> element content",
+        "data_type": "Extract metric data type",
+        "aggregation": "Check formula for aggregation functions",
+        "format": "Extract format attributes"
+      }
+    },
+    "datasource": {
+      "standard_features": [
+        "connection_type",
+        "data_model",
+        "tables",
+        "attributes"
+      ],
+      "parsing_guidance": {
+        "connection_type": "Extract <connection> element's type attribute",
+        "data_model": "Extract data model references",
+        "tables": "Find all <table> elements",
+        "attributes": "Extract attribute definitions"
+      }
+    }
+  },
+  "power_bi": {
+    "report": {
+      "standard_features": [
+        "pages",
+        "visualizations",
+        "filters",
+        "parameters"
+      ],
+      "parsing_guidance": {
+        "pages": "Extract report pages",
+        "visualizations": "Extract visual elements",
+        "filters": "Extract filter definitions",
+        "parameters": "Extract parameter definitions"
+      }
+    },
+    "metric": {
+      "standard_features": [
+        "expression",
+        "data_type",
+        "aggregation"
+      ],
+      "parsing_guidance": {
+        "expression": "Extract DAX expression",
+        "data_type": "Extract data type",
+        "aggregation": "Check expression for aggregation functions"
+      }
+    },
+    "datasource": {
+      "standard_features": [
+        "connection_type",
+        "tables",
+        "fields"
+      ],
+      "parsing_guidance": {
+        "connection_type": "Extract connection type",
+        "tables": "Extract table definitions",
+        "fields": "Extract field definitions"
+      }
+    }
+  }
+}
+

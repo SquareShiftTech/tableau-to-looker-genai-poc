@@ -446,6 +446,256 @@ Only include component types that actually exist in this element. Omit empty arr
         
         return merged_catalog
     
+    async def discover_components_from_file(
+        self,
+        file_path: str,
+        file_content: str,
+        platform: str,
+        feature_catalog: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Discover components from a single file using LLM with feature catalog.
+        
+        This method uses the feature catalog to guide discovery and prevent hallucination.
+        It discovers components, identifies features to extract, and generates parsing instructions.
+        
+        Args:
+            file_path: Path to the file (for context)
+            file_content: XML content of the file
+            platform: BI platform (tableau, cognos, etc.)
+            feature_catalog: Feature catalog for the platform
+        
+        Returns:
+            Dict with discovered components, features, and parsing instructions:
+            {
+                "components": {
+                    "dashboards": [...],
+                    "worksheets": [...],
+                    "datasources": [...],
+                    "calculations": [...],
+                    "filters": [...],
+                    "parameters": [...]
+                },
+                "new_features_discovered": [...],
+                "relationships": [...]
+            }
+        """
+        logger.info(f"Discovering components from file: {file_path} (platform: {platform})")
+        
+        # Build prompt with feature catalog
+        prompt = self._build_discovery_prompt(file_path, file_content, platform, feature_catalog)
+        
+        try:
+            logger.info(f"Calling Gemini to discover components from {file_path}...")
+            response = self.model.generate_content(prompt)
+            
+            if not response or not response.text:
+                logger.error(f"Gemini returned empty response for {file_path}")
+                return {
+                    "components": {},
+                    "new_features_discovered": [],
+                    "relationships": []
+                }
+            
+            result_text = response.text
+            logger.info(f"Received response from Gemini for {file_path}: {len(result_text):,} characters")
+            
+            # Extract JSON from response
+            result_text = self._extract_json(result_text)
+            discovery_result = json.loads(result_text)
+            
+            # Count discovered components
+            components = discovery_result.get("components", {})
+            total_components = sum(
+                len(v) if isinstance(v, list) else 0 
+                for v in components.values()
+            )
+            logger.info(f"Discovered {total_components} components from {file_path}")
+            
+            return discovery_result
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from Gemini response for {file_path}: {e}")
+            logger.error(f"Response text (first 1000 chars): {result_text[:1000] if 'result_text' in locals() else 'N/A'}")
+            return {
+                "components": {},
+                "new_features_discovered": [],
+                "relationships": []
+            }
+        except Exception as e:
+            logger.error(f"Error discovering components from {file_path}: {e}", exc_info=True)
+            return {
+                "components": {},
+                "new_features_discovered": [],
+                "relationships": []
+            }
+    
+    def _build_discovery_prompt(
+        self,
+        file_path: str,
+        file_content: str,
+        platform: str,
+        feature_catalog: Dict[str, Any]
+    ) -> str:
+        """
+        Build prompt for component discovery with feature catalog.
+        
+        Args:
+            file_path: Path to the file
+            file_content: XML content of the file
+            platform: BI platform name
+            feature_catalog: Feature catalog for the platform
+        
+        Returns:
+            Formatted prompt string
+        """
+        # Get platform-specific feature catalog
+        platform_catalog = feature_catalog.get(platform, {})
+        
+        # Format feature catalog for prompt
+        catalog_text = json.dumps(platform_catalog, indent=2)
+        
+        prompt = f"""You are analyzing a {platform.upper()} metadata file to discover components and identify features.
+
+File: {file_path}
+
+File Content:
+{file_content}
+
+Known Features (use these to prevent hallucination):
+{catalog_text}
+
+Task:
+1. Discover all components in this file (dashboards, worksheets, datasources, calculations, filters, parameters, etc.)
+2. For each component:
+   - Extract: id, name, type, file location
+   - Identify features to extract (use known features from catalog, add new ones ONLY if truly discovered in XML)
+   - Generate parsing instructions (how to extract each feature from XML)
+3. Identify relationships between components
+
+IMPORTANT:
+- Reference the feature catalog provided - use standard_features as a guide
+- Only add new features if you actually find them in the XML (don't hallucinate)
+- Generate specific parsing instructions based on the actual XML structure
+- Include file path in component metadata
+
+Return valid JSON only (no markdown formatting). Use this structure:
+
+{{
+    "components": {{
+        "dashboards": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "features_to_extract": ["filters", "worksheets_used", "interactivity", "layout", "parameters"],
+                "parsing_instructions": {{
+                    "filters": "Extract all <filter> elements within <dashboard>",
+                    "worksheets_used": "Find <worksheet> references in <zone> elements",
+                    "interactivity": "Check for <action> elements and their types",
+                    "layout": "Extract <zone> structure and positioning",
+                    "parameters": "Find <parameter> references used in dashboard"
+                }}
+            }}
+        ],
+        "worksheets": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "features_to_extract": ["chart_type", "data_fields", "filters", "calculations", "interactivity"],
+                "parsing_instructions": {{
+                    "chart_type": "Extract <view> element's type attribute or <mark> class attribute",
+                    "data_fields": "Find all <column> elements in <columns> section",
+                    "filters": "Extract <filter> elements and their expressions",
+                    "calculations": "Find <calculation> elements with formula attributes",
+                    "interactivity": "Check for <action> elements"
+                }}
+            }}
+        ],
+        "datasources": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "features_to_extract": ["connection_type", "tables", "fields", "connection_string"],
+                "parsing_instructions": {{
+                    "connection_type": "Extract <connection> element's class attribute",
+                    "tables": "Find all <table> elements and their names",
+                    "fields": "Extract <column> elements with name and type",
+                    "connection_string": "Extract <connection> element's server, dbname attributes"
+                }}
+            }}
+        ],
+        "calculations": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "datasource_id": "...",
+                "features_to_extract": ["formula", "data_type", "aggregation"],
+                "parsing_instructions": {{
+                    "formula": "Extract <calculation> element's formula attribute",
+                    "data_type": "Get <column> element's type attribute",
+                    "aggregation": "Check if formula contains aggregation functions"
+                }}
+            }}
+        ],
+        "filters": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "features_to_extract": ["type", "field", "expression", "scope"],
+                "parsing_instructions": {{
+                    "type": "Extract <filter> element's type attribute",
+                    "field": "Extract <filter> element's field attribute",
+                    "expression": "Extract filter expression or condition",
+                    "scope": "Determine if filter applies to worksheet, dashboard, or global"
+                }}
+            }}
+        ],
+        "parameters": [
+            {{
+                "id": "...",
+                "name": "...",
+                "file": "{file_path}",
+                "features_to_extract": ["type", "data_type", "default_value", "allowed_values"],
+                "parsing_instructions": {{
+                    "type": "Extract <parameter> element's type attribute",
+                    "data_type": "Extract <parameter> element's datatype attribute",
+                    "default_value": "Extract default parameter value",
+                    "allowed_values": "Extract list of allowed values if restricted"
+                }}
+            }}
+        ]
+    }},
+    "new_features_discovered": [
+        {{
+            "component_type": "dashboard",
+            "feature_name": "new_feature_name",
+            "description": "Brief description of the new feature"
+        }}
+    ],
+    "relationships": [
+        {{
+            "type": "dashboard_uses_worksheet",
+            "from": "dashboard-id",
+            "to": ["worksheet-id-1", "worksheet-id-2"]
+        }}
+    ]
+}}
+
+IMPORTANT FORMAT NOTES:
+- "new_features_discovered" should be an array of objects with "component_type" and "feature_name" fields
+- Only include features that are truly new (not in the standard_features catalog)
+- If no new features are discovered, use an empty array: []
+
+Only include component types that actually exist in this file. Omit empty arrays.
+"""
+        
+        return prompt
+    
     def _build_strategy_based_prompt(
         self,
         strategy: Dict[str, Any],

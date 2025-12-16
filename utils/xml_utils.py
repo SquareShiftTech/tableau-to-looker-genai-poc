@@ -232,130 +232,955 @@ def split_xml_file_recursive(
         return []
 
 
+def _parse_attribute_list(attr_str: str) -> List[str]:
+    """
+    Parse comma/and-separated attribute lists.
+    
+    Handles:
+    - Backticks: `` `name`, `id` `` → ["name", "id"]
+    - Plain: "name, caption, datatype" → ["name", "caption", "datatype"]
+    - With "and": "name, caption, and type" → ["name", "caption", "type"]
+    
+    Args:
+        attr_str: Attribute string to parse
+    
+    Returns:
+        List of attribute names
+    """
+    # Remove backticks and single quotes if present
+    attr_str = attr_str.replace('`', '').replace("'", '').strip()
+    
+    # Handle "name and caption" pattern (without comma)
+    if ' and ' in attr_str and ',' not in attr_str:
+        parts = attr_str.split(' and ')
+        return [p.strip() for p in parts if p.strip()]
+    
+    # Split by comma first
+    parts = re.split(r',\s*', attr_str)
+    
+    # Clean up each part
+    attributes = []
+    for part in parts:
+        part = part.strip()
+        if part:
+            # Check if part contains "and" (e.g., "name and caption")
+            if ' and ' in part:
+                # Split on "and" as well
+                and_parts = part.split(' and ')
+                for ap in and_parts:
+                    ap = ap.strip()
+                    if ap:
+                        attributes.append(ap)
+            else:
+                # Remove any remaining "and" at the start/end
+                part = re.sub(r'^\s*and\s+', '', part)
+                part = re.sub(r'\s+and\s*$', '', part)
+                if part:
+                    attributes.append(part)
+    
+    return attributes
+
+
+def _parse_element_condition(elem_str: str) -> tuple[str, Dict[str, str]]:
+    """
+    Parse element with conditions: <zone type-v2="filter">
+    
+    Args:
+        elem_str: Element string like "<zone type-v2=\"filter\">"
+    
+    Returns:
+        Tuple of (element_name, conditions_dict)
+    """
+    # Extract element name
+    match = re.search(r'<([\w-]+)', elem_str)
+    if not match:
+        return (elem_str, {})
+    
+    element_name = match.group(1)
+    conditions = {}
+    
+    # Extract attribute conditions
+    # Pattern: attribute="value" or attribute='value'
+    attr_matches = re.findall(r'(\w+(?:-\w+)*)=["\']([^"\']+)["\']', elem_str)
+    for attr_name, attr_value in attr_matches:
+        conditions[attr_name] = attr_value
+    
+    return (element_name, conditions)
+
+
+def _parse_path_specification(instruction: str) -> Optional[Dict[str, str]]:
+    """
+    Extract path from "within <X>", "from <X>/<Y>", "direct children of <X>", "directly under <X>", etc.
+    
+    Args:
+        instruction: Full instruction string
+    
+    Returns:
+        Dict with 'query' (XPath) and 'direct_children' (bool) or None
+    """
+    result = {'query': None, 'direct_children': False}
+    
+    # Pattern: "directly under <X>"
+    match = re.search(r'directly\s+under\s+<([^>]+)>', instruction, re.IGNORECASE)
+    if match:
+        parent = match.group(1)
+        result['query'] = f'.//{parent}'
+        result['direct_children'] = True
+        return result
+    
+    # Pattern: "direct children of <X>"
+    match = re.search(r'direct\s+children\s+of\s+<([^>]+)>', instruction, re.IGNORECASE)
+    if match:
+        parent = match.group(1)
+        result['query'] = f'.//{parent}'
+        result['direct_children'] = True
+        return result
+    
+    # Pattern: "within <X>"
+    match = re.search(r'within\s+<([^>]+)>', instruction, re.IGNORECASE)
+    if match:
+        parent = match.group(1)
+        result['query'] = f'.//{parent}'
+        return result
+    
+    # Pattern: "from <X>/<Y>"
+    match = re.search(r'from\s+<([^>]+)>/<([^>]+)>', instruction, re.IGNORECASE)
+    if match:
+        parent = match.group(1)
+        child = match.group(2)
+        result['query'] = f'.//{parent}//{child}'
+        return result
+    
+    # Pattern: "in <X>"
+    match = re.search(r'\bin\s+<([^>]+)>', instruction, re.IGNORECASE)
+    if match:
+        parent = match.group(1)
+        result['query'] = f'.//{parent}'
+        return result
+    
+    return None
+
+
+def _extract_attributes_from_elements(
+    elements: List[ET.Element],
+    attributes: List[str]
+) -> List[Dict[str, Any]]:
+    """
+    Extract specified attributes from element list.
+    
+    Args:
+        elements: List of XML elements
+        attributes: List of attribute names to extract
+    
+    Returns:
+        List of dicts with extracted attributes: [{"name": "...", "id": "..."}, ...]
+    """
+    result = []
+    for elem in elements:
+        attrs_dict = {}
+        for attr_name in attributes:
+            value = elem.get(attr_name, '')
+            if value:  # Only include non-empty attributes
+                attrs_dict[attr_name] = value
+        if attrs_dict:  # Only add if at least one attribute was found
+            result.append(attrs_dict)
+    return result
+
+
+def _apply_conditions(
+    elements: List[ET.Element],
+    conditions: Dict[str, Optional[str]]
+) -> List[ET.Element]:
+    """
+    Filter elements based on attribute conditions.
+    
+    Args:
+        elements: List of XML elements to filter
+        conditions: Dict of attribute conditions
+                   - {"type-v2": "filter"} means element must have type-v2="filter"
+                   - {"name": None} means element must have name attribute (any value)
+    
+    Returns:
+        Filtered list of elements
+    """
+    if not conditions:
+        return elements
+    
+    filtered = []
+    for elem in elements:
+        matches = True
+        for attr_name, attr_value in conditions.items():
+            elem_value = elem.get(attr_name)
+            if attr_value is None:
+                # Condition: attribute must exist (any value)
+                if elem_value is None:
+                    matches = False
+                    break
+            else:
+                # Condition: attribute must equal specific value
+                if elem_value != attr_value:
+                    matches = False
+                    break
+        
+        if matches:
+            filtered.append(elem)
+    
+    return filtered
+
+
+def _apply_exclusions(
+    elements: List[ET.Element],
+    exclusions: List[Dict[str, str]]
+) -> List[ET.Element]:
+    """
+    Remove elements matching exclusion rules.
+    
+    Args:
+        elements: List of XML elements to filter
+        exclusions: List of exclusion conditions
+                   - [{"type-v2": "filter"}] excludes elements with type-v2="filter"
+    
+    Returns:
+        Filtered list of elements (exclusions removed)
+    """
+    if not exclusions:
+        return elements
+    
+    filtered = []
+    for elem in elements:
+        should_exclude = False
+        for exclusion in exclusions:
+            matches_exclusion = True
+            for attr_name, attr_value in exclusion.items():
+                if elem.get(attr_name) != attr_value:
+                    matches_exclusion = False
+                    break
+            if matches_exclusion:
+                should_exclude = True
+                break
+        
+        if not should_exclude:
+            filtered.append(elem)
+    
+    return filtered
+
+
 def _parse_instruction(instruction: str) -> Dict[str, Any]:
     """
     Parse natural language instruction to structured query.
     
-    Uses pattern matching to convert instructions to XPath-like queries.
+    Enhanced to handle complex patterns:
+    - Multiple attributes (with/without backticks)
+    - Element conditions
+    - Exclusions
+    - Path specifications
+    - Structure extraction
     
     Args:
-        instruction: Natural language instruction (e.g., "Extract all <filter> elements within <dashboard>")
+        instruction: Natural language instruction
     
     Returns:
-        Dict with pattern type and query details
+        Dict with pattern type, query details, attributes, conditions, exclusions
     """
     instruction_lower = instruction.lower()
+    result = {
+        'pattern': 'generic',
+        'query': './/*',
+        'attributes': [],
+        'conditions': {},
+        'exclusions': [],
+        'path': None,
+        'direct_children': False,
+        'instruction': instruction
+    }
     
-    # Pattern 1: Extract all elements
+    # Parse exclusions first (they appear at the end)
+    exclusion_matches = re.findall(
+        r'excluding\s+those\s+with\s+([\w-]+)=["\']([^"\']+)["\']',
+        instruction,
+        re.IGNORECASE
+    )
+    if exclusion_matches:
+        result['exclusions'] = [{attr: val} for attr, val in exclusion_matches]
+    
+    # Parse "NOT" conditions with multiple values
+    # "type-v2' is NOT 'layout-basic', 'layout-flow', 'title', or 'filter'"
+    not_match = re.search(
+        r"['\"]?([\w-]+)['\"]?\s+is\s+NOT\s+(.+)",
+        instruction,
+        re.IGNORECASE
+    )
+    if not_match:
+        attr_name = not_match.group(1)
+        not_values_str = not_match.group(2)
+        
+        # Extract all quoted values from the NOT clause
+        # Pattern: 'layout-basic', 'layout-flow', 'title', or 'filter'
+        # Stop at "Extract" or "." to avoid capturing too much
+        not_values_str_clean = re.split(r'\s+Extract|\.', not_values_str)[0]  # Stop at "Extract" or "."
+        not_values = re.findall(r"['\"]?([\w-]+)['\"]?", not_values_str_clean)
+        
+        # Add exclusions for each NOT value
+        if not result.get('exclusions'):
+            result['exclusions'] = []
+        for val in not_values:
+            result['exclusions'].append({attr_name: val})
+    
+    # Parse "and have a <attr> attribute" conditions (attribute must exist)
+    have_attr_matches = re.findall(
+        r'and\s+have\s+(?:a\s+)?[`\']?([\w-]+)[`\']?\s+attribute',
+        instruction,
+        re.IGNORECASE
+    )
+    if have_attr_matches:
+        for attr_name in have_attr_matches:
+            result['conditions'][attr_name] = None  # None means attribute must exist
+    
+    # Parse path specification
+    path_info = _parse_path_specification(instruction)
+    if path_info:
+        result['path'] = path_info.get('query')
+        result['direct_children'] = path_info.get('direct_children', False)
+    
+    # Pattern 1: Multiple attributes including text content
+    # "Extract text content, `bold`, `fontcolor`, `fontsize` attributes from <run> elements"
+    match = re.search(
+        r'extract\s+text\s+content\s*,\s*([`\w\s,]+)\s+attributes?\s+from\s+<([^>]+)>\s+elements?',
+        instruction,
+        re.IGNORECASE
+    )
+    if match:
+        attr_str = match.group(1)
+        elem_str = match.group(2)
+        attributes = _parse_attribute_list(attr_str)
+        element_name, conditions = _parse_element_condition(f'<{elem_str}>')
+        
+        result['pattern'] = 'extract_attributes_with_text'
+        result['attributes'] = attributes
+        result['element'] = element_name
+        result['include_text'] = True
+        result['conditions'].update(conditions)
+        
+        # Build query
+        if result['path']:
+            result['query'] = f"{result['path']}//{element_name}"
+        else:
+            result['query'] = f'.//{element_name}'
+        
+        return result
+    
+    # Pattern 1.5: Nested path without spaces (check before other patterns)
+    # "Extract 'bold', 'fontcolor', 'fontsize' attributes from <layout-options><title><formatted-text><run> element."
+    # "Extract 'value' attribute from <style><style-rule element='table'><format attr='background-color'> element."
+    # Find consecutive <X><Y><Z> patterns
+    nested_elements = re.findall(r'<([\w-]+)', instruction)
+    if len(nested_elements) >= 2:
+        # Check if this is a nested path pattern (multiple consecutive elements)
+        # Look for pattern like: "from <X><Y><Z> element" or "from <X attr='val'><Y> element"
+        # Match: from <X>...<Y>...<Z>... element (allowing attributes in between)
+        nested_path_match = re.search(
+            r'from\s+<([\w-]+)(?:\s+[^>]+)?><([\w-]+)(?:\s+[^>]+)?><([\w-]+)(?:\s+[^>]+)?>(?:<([\w-]+)(?:\s+[^>]+)?>)?\s+element',
+            instruction,
+            re.IGNORECASE
+        )
+        if nested_path_match:
+            # Extract element names (groups 1, 2, 3, 4)
+            path_elements = []
+            for i in range(1, 5):
+                if nested_path_match.group(i):
+                    path_elements.append(nested_path_match.group(i))
+            
+            if len(path_elements) >= 2:
+                last_element = path_elements[-1]
+                
+                # Try to extract attributes mentioned before "from"
+                attr_match = re.search(
+                    r'extract\s+([`\'\w\s,-]+)\s+attributes?\s+from',
+                    instruction,
+                    re.IGNORECASE
+                )
+                if attr_match:
+                    attr_str = attr_match.group(1)
+                    attributes = _parse_attribute_list(attr_str)
+                    
+                    # Build nested XPath
+                    nested_path = '//'.join(path_elements)
+                    
+                    result['pattern'] = 'extract_attributes' if len(attributes) > 1 else 'extract_attribute'
+                    if len(attributes) > 1:
+                        result['attributes'] = attributes
+                    else:
+                        result['attribute'] = attributes[0] if attributes else ''
+                    result['element'] = last_element
+                    result['query'] = f'.//{nested_path}'
+                    
+                    # Parse attribute conditions in path elements
+                    # Check for element='table' in style-rule (parent condition)
+                    elem_cond_match = re.search(r"<style-rule[^>]*element=['\"]?([\w-]+)['\"]?", instruction, re.IGNORECASE)
+                    if elem_cond_match:
+                        # Store as parent condition - will be applied to style-rule elements
+                        result['parent_conditions'] = {'element': elem_cond_match.group(1)}
+                    
+                    # Check for attr='background-color' in format (child condition)
+                    attr_cond_match = re.search(r"<format[^>]*attr=['\"]?([\w-]+)['\"]?", instruction, re.IGNORECASE)
+                    if attr_cond_match:
+                        # Store as condition on format element
+                        result['conditions']['attr'] = attr_cond_match.group(1)
+                    
+                    return result
+    
+    # Pattern 2: Single attribute (simple) - MUST come before multiple attributes pattern
+    # "Extract the class attribute from the <mark> element"
+    # "Extract 'name' attribute from the <dashboard> element."
+    # Check if it's a single attribute (not multiple)
+    single_attr_match = re.search(
+        r"extract\s+(?:the\s+)?[`'\"]?([\w-]+)[`'\"]?\s+attribute\s+from\s+(?:all\s+)?(?:the\s+)?<([^>]+)>\s+element(?:s)?\.?",
+        instruction,
+        re.IGNORECASE
+    )
+    # Make sure it's not multiple attributes (check if there's a comma or "and" before "attribute")
+    if single_attr_match:
+        before_attribute = instruction[:single_attr_match.start()].lower()
+        # If there's a comma or "and" before "attribute", it's multiple attributes
+        if ',' not in before_attribute and ' and ' not in before_attribute:
+            attr_name = single_attr_match.group(1)
+            element_name = single_attr_match.group(2)
+            
+            # Clean attribute name
+            attr_name = attr_name.replace("'", '').replace('"', '').replace('`', '').strip()
+            
+            result['pattern'] = 'extract_attribute'
+            result['attribute'] = attr_name
+            result['element'] = element_name
+            result['query'] = f'.//{element_name}'
+            
+            return result
+    
+    # Pattern 3: Multiple attributes with backticks or single quotes
+    # "Extract `name`, `id`, `param`, `mode` attributes from <zone> elements"
+    # "Extract 'derived-from', 'id', 'path', 'revision', 'site' attributes from the <repository-location> element."
+    # "Extract 'name' and 'caption' attributes from all <datasource> elements directly under <datasources>."
+    match = re.search(
+        r'extract\s+([`\'\w\s,-]+)\s+attributes?\s+from\s+(?:all\s+)?(?:the\s+)?<([^>]+)>\s+element(?:s)?',
+        instruction,
+        re.IGNORECASE
+    )
+    if match:
+        attr_str = match.group(1)
+        elem_str = match.group(2)
+        attributes = _parse_attribute_list(attr_str)
+        element_name, conditions = _parse_element_condition(f'<{elem_str}>')
+        
+        result['pattern'] = 'extract_attributes'
+        result['attributes'] = attributes
+        result['element'] = element_name
+        result['conditions'].update(conditions)
+        
+        # Check for "all" keyword
+        if 'all' in instruction.lower():
+            result['return_all'] = True
+        
+        # Build query
+        if result['path']:
+            if result.get('direct_children'):
+                # For direct children, keep path separate - we'll handle in execution
+                result['query'] = result['path']  # Parent path (e.g., .//datasources)
+                # Element name is stored in result['element'] (e.g., 'datasource')
+            else:
+                result['query'] = f"{result['path']}//{element_name}"
+        else:
+            result['query'] = f'.//{element_name}'
+        
+        return result
+    
+    # Pattern 4: Multiple attributes without backticks (plain text)
+    # "Extract name, caption, datatype, role, and type attributes from <column> elements"
+    match = re.search(
+        r'extract\s+([\w\s,-]+(?:and\s+[\w-]+)?)\s+attributes?\s+from\s+(?:all\s+)?(?:the\s+)?<([^>]+)>\s+element(?:s)?',
+        instruction,
+        re.IGNORECASE
+    )
+    if match:
+        attr_str = match.group(1)
+        elem_str = match.group(2)
+        attributes = _parse_attribute_list(attr_str)
+        element_name, conditions = _parse_element_condition(f'<{elem_str}>')
+        
+        result['pattern'] = 'extract_attributes'
+        result['attributes'] = attributes
+        result['element'] = element_name
+        result['conditions'].update(conditions)
+        
+        # Check for "all" keyword
+        if 'all' in instruction.lower():
+            result['return_all'] = True
+        
+        # Build query
+        if result['path']:
+            if result.get('direct_children'):
+                # For direct children, keep path separate
+                result['query'] = result['path']  # Parent path
+            else:
+                result['query'] = f"{result['path']}//{element_name}"
+        else:
+            result['query'] = f'.//{element_name}'
+        
+        return result
+    
+    # Pattern 5: Single attribute with path
+    # "Extract the class attribute from the <mark> element within <pane>"
+    match = re.search(
+        r'extract\s+(?:the\s+)?([\w-]+)\s+attribute\s+from\s+(?:the\s+)?<([^>]+)>\s+element\s+(?:within|in)\s+<([^>]+)>',
+        instruction,
+        re.IGNORECASE
+    )
+    if match:
+        attr_name = match.group(1)
+        element_name = match.group(2)
+        parent_name = match.group(3)
+        
+        result['pattern'] = 'extract_attribute'
+        result['attribute'] = attr_name
+        result['element'] = element_name
+        result['query'] = f'.//{parent_name}//{element_name}'
+        
+        return result
+    
+    
+    # Pattern 7: Extract all elements
     # "Extract all <X> elements" or "Find all <X> elements"
-    match = re.search(r'(?:extract|find)\s+all\s+<([^>]+)>\s+elements', instruction_lower)
+    match = re.search(r'(?:extract|find)\s+all\s+<([^>]+)>\s+elements?', instruction_lower)
     if match:
         element_name = match.group(1)
-        return {
-            'pattern': 'extract_all_elements',
-            'element': element_name,
-            'query': f'.//{element_name}'
-        }
+        result['pattern'] = 'extract_all_elements'
+        result['element'] = element_name
+        result['query'] = f'.//{element_name}'
+        return result
     
-    # Pattern 2: Extract all elements within/inside another element
-    # "Extract all <X> elements within <Y>" or "Find all <X> in <Y>"
+    # Pattern 8: Extract all elements within/inside another element
     match = re.search(r'(?:extract|find)\s+all\s+<([^>]+)>\s+elements?\s+(?:within|inside|in)\s+<([^>]+)>', instruction_lower)
     if match:
         child_element = match.group(1)
         parent_element = match.group(2)
-        return {
-            'pattern': 'extract_all_elements',
-            'element': child_element,
-            'query': f'.//{parent_element}//{child_element}'
-        }
+        result['pattern'] = 'extract_all_elements'
+        result['element'] = child_element
+        result['query'] = f'.//{parent_element}//{child_element}'
+        return result
     
-    # Pattern 3: Extract attribute
-    # "Extract <X> element's Y attribute" or "Get <X> element's Y attribute"
-    match = re.search(r'(?:extract|get)\s+<([^>]+)>\s+elements?\'?s?\s+(\w+)\s+attribute', instruction_lower)
+    # Pattern 9: Extract structure with attributes
+    # "Extract the hierarchical structure of <zones> elements, including their id, name, type-v2, x, y, h, w attributes"
+    match = re.search(
+        r'extract\s+(?:the\s+)?(?:hierarchical\s+)?structure\s+of\s+<([^>]+)>\s+elements?.*?including\s+their\s+([\w\s,]+(?:and\s+[\w]+)?)\s+attributes?',
+        instruction,
+        re.IGNORECASE
+    )
     if match:
         element_name = match.group(1)
-        attr_name = match.group(2)
-        return {
-            'pattern': 'extract_attribute',
-            'element': element_name,
-            'attribute': attr_name,
-            'query': f'.//{element_name}'
-        }
+        attr_str = match.group(2)
+        attributes = _parse_attribute_list(attr_str)
+        
+        result['pattern'] = 'extract_structure'
+        result['element'] = element_name
+        result['attributes'] = attributes
+        result['query'] = f'.//{element_name}'
+        return result
     
-    # Pattern 4: Find references
-    # "Find <X> references" or "Find <X> references in <Y>"
+    # Pattern 10: Extract structure (simple)
+    match = re.search(r'(?:extract|get)\s+<([^>]+)>\s+structure', instruction_lower)
+    if match:
+        element_name = match.group(1)
+        result['pattern'] = 'extract_structure'
+        result['element'] = element_name
+        result['query'] = f'.//{element_name}'
+        return result
+    
+    # Pattern 11: Find...Extract pattern
+    # "Find <zone> elements... Extract 'name' and 'id'."
+    # "Find <zone> elements (in main dashboard and device layouts) where 'type-v2=\"filter\"'. Extract 'name', 'id', 'mode', 'param'."
+    match = re.search(
+        r'find\s+<([^>]+)>\s+elements?.*?extract\s+([`\'\w\s,-]+)',
+        instruction,
+        re.IGNORECASE | re.DOTALL
+    )
+    if match:
+        element_name = match.group(1)
+        attr_str = match.group(2)
+        attributes = _parse_attribute_list(attr_str)
+        
+        result['pattern'] = 'extract_attributes'
+        result['attributes'] = attributes
+        result['element'] = element_name
+        result['query'] = f'.//{element_name}'
+        
+        # Parse conditions from "where" clause
+        where_match = re.search(r"where\s+['\"]?([\w-]+)['\"]?=['\"]?([^'\"]+)['\"]?", instruction, re.IGNORECASE)
+        if where_match:
+            attr_name = where_match.group(1)
+            attr_value = where_match.group(2)
+            result['conditions'][attr_name] = attr_value
+        
+        # Parse "that have a 'name' attribute" condition
+        have_attr_match = re.search(r"that\s+have\s+(?:a\s+)?['\"]?([\w-]+)['\"]?\s+attribute", instruction, re.IGNORECASE)
+        if have_attr_match:
+            attr_name = have_attr_match.group(1)
+            result['conditions'][attr_name] = None  # Must exist
+        
+        return result
+    
+    # Pattern 12: Find references
     match = re.search(r'find\s+<([^>]+)>\s+references?(?:\s+in\s+<([^>]+)>)?', instruction_lower)
     if match:
         element_name = match.group(1)
         parent_element = match.group(2) if match.group(2) else None
+        result['pattern'] = 'find_references'
+        result['element'] = element_name
         if parent_element:
-            query = f'.//{parent_element}//{element_name}'
+            result['query'] = f'.//{parent_element}//{element_name}'
         else:
-            query = f'.//{element_name}'
-        return {
-            'pattern': 'find_references',
-            'element': element_name,
-            'query': query
-        }
+            result['query'] = f'.//{element_name}'
+        return result
     
-    # Pattern 5: Check for elements
-    # "Check for <X> elements" or "Check if <X> exists"
+    # Pattern 12: Check for elements
     match = re.search(r'check\s+(?:for|if)\s+<([^>]+)>\s+elements?', instruction_lower)
     if match:
         element_name = match.group(1)
-        return {
-            'pattern': 'check_for',
-            'element': element_name,
-            'query': f'.//{element_name}'
-        }
+        result['pattern'] = 'check_for'
+        result['element'] = element_name
+        result['query'] = f'.//{element_name}'
+        return result
     
-    # Pattern 6: Extract structure
-    # "Extract <X> structure" or "Get <X> structure"
-    match = re.search(r'(?:extract|get)\s+<([^>]+)>\s+structure', instruction_lower)
+    # Pattern 13: Extract elements and their expressions
+    # "Extract <filter> elements and their expressions from <groupfilter> members"
+    match = re.search(
+        r'extract\s+<([^>]+)>\s+elements?\s+and\s+their\s+(\w+)\s+from',
+        instruction,
+        re.IGNORECASE
+    )
     if match:
         element_name = match.group(1)
-        return {
-            'pattern': 'extract_structure',
-            'element': element_name,
-            'query': f'.//{element_name}'
-        }
+        attr_name = match.group(2)  # e.g., "expressions"
+        result['pattern'] = 'extract_elements_with_attr'
+        result['element'] = element_name
+        result['attribute'] = attr_name
+        result['query'] = f'.//{element_name}'
+        return result
     
-    # Default: return generic query
-    return {
-        'pattern': 'generic',
-        'query': instruction
-    }
+    # Pattern 14: Text content extraction
+    # "Extract the text content of <field> elements"
+    match = re.search(
+        r'extract\s+(?:the\s+)?text\s+content\s+of\s+<([^>]+)>\s+elements?',
+        instruction,
+        re.IGNORECASE
+    )
+    if match:
+        element_name = match.group(1)
+        result['pattern'] = 'extract_text_content'
+        result['element'] = element_name
+        result['query'] = f'.//{element_name}'
+        return result
+    
+    # Pattern 15: "For...extract...and...from" pattern
+    # "For the <datasource-dependencies> block, extract 'name', 'caption', 'datatype', 'role', 'type' from <column> elements and 'column', 'derivation', 'name', 'pivot', 'type' from <column-instance> elements."
+    for_match = re.search(
+        r'for\s+(?:the\s+)?<([\w-]+)>\s+block.*?extract\s+([`\'\w\s,-]+)\s+from\s+<([\w-]+)>\s+elements?\s+and\s+([`\'\w\s,-]+)\s+from\s+<([\w-]+)>\s+elements?',
+        instruction,
+        re.IGNORECASE | re.DOTALL
+    )
+    if for_match:
+        block_name = for_match.group(1)
+        attr_str1 = for_match.group(2)
+        elem1 = for_match.group(3)
+        attr_str2 = for_match.group(4)
+        elem2 = for_match.group(5)
+        
+        # This is complex - extract from two element types
+        # For now, extract from first element type (can be enhanced later)
+        attributes1 = _parse_attribute_list(attr_str1)
+        
+        result['pattern'] = 'extract_attributes'
+        result['attributes'] = attributes1
+        result['element'] = elem1
+        result['query'] = f'.//{block_name}//{elem1}'
+        result['instruction'] = instruction  # Keep original for reference
+        return result
+    
+    # Pattern 16: Complex instruction with multiple parts
+    # "Extract name, caption, datatype, role, and type attributes from <column> elements, and name, column, derivation, pivot, type from <column-instance> elements, all within <datasource-dependencies>"
+    if 'and' in instruction_lower and 'attributes' in instruction_lower and 'from' in instruction_lower:
+        # Try to parse as multi-element attribute extraction
+        # Extract first part before "and"
+        first_part_match = re.search(
+            r'extract\s+([`\'\w\s,-]+)\s+attributes?\s+from\s+<([\w-]+)>\s+elements?',
+            instruction,
+            re.IGNORECASE
+        )
+        if first_part_match:
+            attr_str = first_part_match.group(1)
+            elem_str = first_part_match.group(2)
+            attributes = _parse_attribute_list(attr_str)
+            element_name, conditions = _parse_element_condition(f'<{elem_str}>')
+            
+            result['pattern'] = 'extract_attributes'
+            result['attributes'] = attributes
+            result['element'] = element_name
+            result['conditions'].update(conditions)
+            result['query'] = f'.//{element_name}'
+            return result
+    
+    # Default: return generic with instruction preserved
+    result['pattern'] = 'generic'
+    result['instruction'] = instruction
+    return result
 
 
 def _execute_instruction(root_elem: ET.Element, parsed_instruction: Dict[str, Any]) -> Any:
     """
-    Execute parsed instruction on XML element.
+    Execute parsed instruction on XML element and return structured data.
     
     Args:
         root_elem: Root XML element to query
         parsed_instruction: Parsed instruction dict from _parse_instruction()
     
     Returns:
-        Extracted value(s) based on instruction pattern
+        Structured data (dicts/lists) instead of XML strings
     """
     pattern = parsed_instruction.get('pattern')
     query = parsed_instruction.get('query', '')
     
     try:
-        if pattern == 'extract_all_elements':
-            elements = root_elem.findall(query)
-            return [ET.tostring(e, encoding='unicode') for e in elements] if elements else []
+        if pattern == 'extract_attributes' or pattern == 'extract_attributes_with_text':
+            # Extract multiple attributes from elements (optionally with text content)
+            # Handle direct children if specified
+            direct_children = parsed_instruction.get('direct_children', False)
+            if direct_children:
+                # For direct children, find parent first, then get direct children
+                parent_query = parsed_instruction.get('path', '')
+                element_name = parsed_instruction.get('element', '')
+                
+                if parent_query and element_name:
+                    # Find parent elements
+                    parents = root_elem.findall(parent_query)
+                    elements = []
+                    for parent in parents:
+                        # Get direct children only (not descendants)
+                        for child in parent:
+                            # Handle namespaces
+                            child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                            if child_tag == element_name:
+                                elements.append(child)
+                else:
+                    # Fallback: try to get direct children from query
+                    # If query is like ".//datasources", get direct children
+                    if query.startswith('.//'):
+                        parent_tag = query.replace('.//', '')
+                        parents = root_elem.findall(f'.//{parent_tag}')
+                        elements = []
+                        for parent in parents:
+                            for child in parent:
+                                child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                                if child_tag == element_name:
+                                    elements.append(child)
+                    else:
+                        elements = []
+            else:
+                elements = root_elem.findall(query)
+            
+            if not elements:
+                return []
+            
+            # Apply conditions
+            conditions = parsed_instruction.get('conditions', {})
+            if conditions:
+                elements = _apply_conditions(elements, conditions)
+            
+            # Apply exclusions
+            exclusions = parsed_instruction.get('exclusions', [])
+            if exclusions:
+                elements = _apply_exclusions(elements, exclusions)
+            
+            # Extract attributes
+            attributes = parsed_instruction.get('attributes', [])
+            # Clean attribute names (remove quotes)
+            attributes = [attr.replace("'", '').replace('"', '').replace('`', '').strip() for attr in attributes if attr]
+            include_text = parsed_instruction.get('include_text', False) or (pattern == 'extract_attributes_with_text')
+            
+            if attributes:
+                result = _extract_attributes_from_elements(elements, attributes)
+                # Add text content if requested
+                if include_text:
+                    for i, elem in enumerate(elements):
+                        if elem.text and elem.text.strip():
+                            if i < len(result):
+                                result[i]['_text'] = elem.text.strip()
+                return result
+            else:
+                # If no specific attributes, extract all attributes from each element
+                result = []
+                for elem in elements:
+                    attrs_dict = dict(elem.attrib)
+                    if include_text and elem.text and elem.text.strip():
+                        attrs_dict['_text'] = elem.text.strip()
+                    if attrs_dict:
+                        result.append(attrs_dict)
+                return result
         
         elif pattern == 'extract_attribute':
-            element = root_elem.find(query)
-            if element is not None:
-                attr_name = parsed_instruction.get('attribute')
-                return element.get(attr_name, '')
-            return None
+            # Extract single attribute
+            element_name = parsed_instruction.get('element', '')
+            conditions = parsed_instruction.get('conditions', {})
+            
+            # Check if root_elem itself matches the element we're looking for
+            root_tag = root_elem.tag.split('}')[-1] if '}' in root_elem.tag else root_elem.tag
+            if root_tag == element_name:
+                # Root element is the target - use it directly
+                elements = [root_elem]
+            else:
+                # For nested paths with parent conditions, filter intermediate elements
+                # Example: <style><style-rule element='table'><format attr='background-color'>
+                parent_conditions = parsed_instruction.get('parent_conditions', {})
+                if parent_conditions:
+                    # Find parent elements first (e.g., style-rule with element='table')
+                    # Extract parent path from query (everything except last element)
+                    query_parts = query.split('//')
+                    if len(query_parts) > 1:
+                        parent_query = '//'.join(query_parts[:-1])  # All but last
+                        parent_elements = root_elem.findall(parent_query)
+                        parent_elements = _apply_conditions(parent_elements, parent_conditions)
+                        
+                        # Now find child elements within filtered parents
+                        last_element = query_parts[-1]
+                        elements = []
+                        for parent in parent_elements:
+                            child_elements = parent.findall(f'.//{last_element}')
+                            if conditions:
+                                child_elements = _apply_conditions(child_elements, conditions)
+                            elements.extend(child_elements)
+                    else:
+                        # Fallback to regular search
+                        elements = root_elem.findall(query)
+                        if conditions:
+                            elements = _apply_conditions(elements, conditions)
+                else:
+                    # Regular search
+                    elements = root_elem.findall(query)
+                    if conditions:
+                        elements = _apply_conditions(elements, conditions)
+            
+            if not elements:
+                return None
+            
+            attr_name = parsed_instruction.get('attribute', '')
+            # Remove quotes if present
+            if attr_name:
+                attr_name = attr_name.replace("'", '').replace('"', '').replace('`', '').strip()
+            
+            if not attr_name:
+                return None
+            
+            # Check if "all" keyword is present - always return list
+            instruction_text = parsed_instruction.get('instruction', '').lower()
+            return_all = 'all' in instruction_text
+            
+            # Extract values
+            values = [elem.get(attr_name, '') for elem in elements if elem.get(attr_name)]
+            if not values:
+                return None
+            elif return_all or len(values) > 1:
+                return values
+            else:
+                return values[0]
+        
+        elif pattern == 'extract_all_elements':
+            # Extract all elements with all their attributes
+            elements = root_elem.findall(query)
+            if not elements:
+                return []
+            
+            result = []
+            for elem in elements:
+                attrs_dict = dict(elem.attrib)
+                # Also include text content if present
+                if elem.text and elem.text.strip():
+                    attrs_dict['_text'] = elem.text.strip()
+                if attrs_dict:
+                    result.append(attrs_dict)
+            return result
+        
+        elif pattern == 'extract_structure':
+            # Extract hierarchical structure
+            elements = root_elem.findall(query)
+            if not elements:
+                return None
+            
+            attributes = parsed_instruction.get('attributes', [])
+            
+            def build_structure(elem: ET.Element) -> Dict[str, Any]:
+                """Recursively build structure for element and children."""
+                struct = {}
+                
+                # Extract specified attributes or all attributes
+                if attributes:
+                    for attr in attributes:
+                        value = elem.get(attr, '')
+                        if value:
+                            struct[attr] = value
+                else:
+                    struct.update(dict(elem.attrib))
+                
+                # Include text content
+                if elem.text and elem.text.strip():
+                    struct['_text'] = elem.text.strip()
+                
+                # Recursively process children
+                children = list(elem)
+                if children:
+                    child_list = []
+                    for child in children:
+                        child_struct = build_structure(child)
+                        if child_struct:
+                            child_list.append(child_struct)
+                    if child_list:
+                        struct['_children'] = child_list
+                
+                return struct
+            
+            if len(elements) == 1:
+                return build_structure(elements[0])
+            else:
+                return [build_structure(elem) for elem in elements]
+        
+        elif pattern == 'extract_elements_with_attr':
+            # Extract elements and a specific attribute/child
+            elements = root_elem.findall(query)
+            if not elements:
+                return []
+            
+            attr_name = parsed_instruction.get('attribute', '')
+            result = []
+            for elem in elements:
+                item = dict(elem.attrib)
+                # Try to find child element or attribute with the name
+                child = elem.find(f'.//{attr_name}')
+                if child is not None:
+                    if child.text:
+                        item[attr_name] = child.text.strip()
+                    else:
+                        item[attr_name] = dict(child.attrib)
+                elif elem.get(attr_name):
+                    item[attr_name] = elem.get(attr_name)
+                result.append(item)
+            return result
+        
+        elif pattern == 'extract_attributes_complex':
+            # Complex multi-element extraction - try manual parsing
+            instruction = parsed_instruction.get('instruction', '')
+            # For now, return empty and log - this needs special handling
+            logger.warning(f"Complex instruction not fully handled: {instruction[:100]}")
+            return []
         
         elif pattern == 'find_references':
+            # Find references (extract name/id/caption)
             elements = root_elem.findall(query)
-            # Extract name or id attributes
             refs = []
             for elem in elements:
                 ref_id = elem.get('name') or elem.get('id') or elem.get('caption', '')
@@ -364,24 +1189,41 @@ def _execute_instruction(root_elem: ET.Element, parsed_instruction: Dict[str, An
             return refs
         
         elif pattern == 'check_for':
+            # Check if element exists
             element = root_elem.find(query)
             return element is not None
         
-        elif pattern == 'extract_structure':
-            element = root_elem.find(query)
-            if element is not None:
-                return ET.tostring(element, encoding='unicode')
+        elif pattern == 'generic':
+            # Generic fallback - try to extract something useful
+            instruction = parsed_instruction.get('instruction', '')
+            
+            # Try to find any element mentioned
+            elem_matches = re.findall(r'<([\w-]+)>', instruction)
+            if elem_matches:
+                # Try to find the first element mentioned
+                element_name = elem_matches[0]
+                elements = root_elem.findall(f'.//{element_name}')
+                if elements:
+                    # Extract all attributes from first element
+                    if len(elements) == 1:
+                        return dict(elements[0].attrib)
+                    else:
+                        return [dict(elem.attrib) for elem in elements]
+            
             return None
         
         else:
-            # Generic: try to find element
-            element = root_elem.find(query)
-            if element is not None:
-                return ET.tostring(element, encoding='unicode')
+            # Unknown pattern - try generic approach
+            elements = root_elem.findall(query)
+            if elements:
+                if len(elements) == 1:
+                    return dict(elements[0].attrib)
+                else:
+                    return [dict(elem.attrib) for elem in elements]
             return None
     
     except Exception as e:
-        logger.warning(f"Error executing instruction {pattern}: {e}")
+        logger.warning(f"Error executing instruction {pattern}: {e}", exc_info=True)
         return None
 
 
@@ -419,12 +1261,48 @@ def extract_features_from_xml(
         # Find component by ID/name if needed
         component_elem = root
         if component_id:
-            # Try to find component element by id/name attribute
+            # Clean component_id (remove braces if present)
+            clean_id = component_id.strip('{}')
+            
+            # For dashboards, the XML structure is: <dashboards><dashboard name="...">
+            # The component_id is a GUID, but XML might only have name attribute
+            # Try to find by matching the component name from discovered_components
+            
+            # First, try to find by exact ID match
+            found = False
             for elem in root.iter():
-                elem_id = elem.get('id') or elem.get('name') or ''
-                if component_id in elem_id or elem_id in component_id:
+                elem_id = elem.get('id', '')
+                if elem_id and (component_id == elem_id or clean_id in elem_id or elem_id in component_id):
                     component_elem = elem
+                    found = True
                     break
+            
+            # If not found by ID, try to find by element type
+            # For dashboards, look for <dashboard> element
+            if not found:
+                # Check if this is a dashboard file - look for dashboard element
+                dashboard_elem = root.find('.//dashboard')
+                if dashboard_elem is not None:
+                    component_elem = dashboard_elem
+                    found = True
+                
+                # For worksheets, look for worksheet with matching name/id
+                elif root.find('.//worksheet') is not None:
+                    # Try to find worksheet by name or id
+                    for worksheet in root.findall('.//worksheet'):
+                        ws_name = worksheet.get('name', '')
+                        ws_id = worksheet.get('id', '')
+                        if component_id in ws_name or component_id in ws_id or ws_name in component_id:
+                            component_elem = worksheet
+                            found = True
+                            break
+                
+                # For datasources, look for datasource element
+                elif root.find('.//datasource') is not None:
+                    datasource_elem = root.find('.//datasource')
+                    if datasource_elem is not None:
+                        component_elem = datasource_elem
+                        found = True
         
         # Extract each feature using parsing instructions
         for feature_name, instruction in parsing_instructions.items():

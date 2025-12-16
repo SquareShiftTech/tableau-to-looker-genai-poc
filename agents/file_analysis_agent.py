@@ -2,8 +2,9 @@
 import os
 from typing import Dict, Any, List
 from models.state import AssessmentState
-from utils.xml_utils import get_first_level_elements, read_xml_element
+from utils.xml_utils import get_first_level_elements, read_xml_element, split_xml_file_recursive
 from utils.logger import logger
+from config.settings import get_settings
 
 
 async def file_analysis_agent(state: AssessmentState) -> AssessmentState:
@@ -65,6 +66,8 @@ async def file_analysis_agent(state: AssessmentState) -> AssessmentState:
         
         # Process each element
         parsed_elements_paths: List[Dict[str, Any]] = []
+        settings = get_settings()
+        size_threshold = settings.chunk_max_size_bytes
         
         for element_name in element_names:
             logger.info(f"Processing element: {element_name}")
@@ -81,15 +84,41 @@ async def file_analysis_agent(state: AssessmentState) -> AssessmentState:
             with open(element_file_path, 'w', encoding='utf-8') as f:
                 f.write(element_content)
             
-            file_size = os.path.getsize(element_file_path)
-            logger.info(f"Saved {element_name} to {element_file_path} ({file_size:,} bytes)")
+            initial_file_size = os.path.getsize(element_file_path)
+            logger.info(f"Saved {element_name} to {element_file_path} ({initial_file_size:,} bytes)")
             
-            # Store metadata
-            parsed_elements_paths.append({
-                'element_name': element_name,
-                'file_path': element_file_path,
-                'size_bytes': file_size
-            })
+            # Recursively split if file is larger than threshold
+            if initial_file_size > size_threshold:
+                logger.info(
+                    f"File {element_file_path} ({initial_file_size:,} bytes) exceeds threshold "
+                    f"({size_threshold:,} bytes). Starting recursive splitting..."
+                )
+                
+                split_files = split_xml_file_recursive(
+                    element_file_path,
+                    output_dir,
+                    size_threshold=size_threshold
+                )
+                
+                if split_files:
+                    logger.info(
+                        f"Split {element_name} into {len(split_files)} files "
+                        f"(all ≤ {size_threshold:,} bytes)"
+                    )
+                    parsed_elements_paths.extend(split_files)
+                else:
+                    # If splitting failed, keep original file
+                    logger.warning(f"Splitting failed for {element_file_path}, keeping original file")
+                    parsed_elements_paths.append({
+                        'file_path': element_file_path,
+                        'size_bytes': initial_file_size
+                    })
+            else:
+                # File is small enough, keep as-is
+                parsed_elements_paths.append({
+                    'file_path': element_file_path,
+                    'size_bytes': initial_file_size
+                })
         
         # Update state
         state['parsed_elements_paths'] = parsed_elements_paths
