@@ -22,7 +22,7 @@ async def test_parsing_agent():
     test_file = "input_files/tableau/sales_summary_final.xml"
     
     if not os.path.exists(test_file):
-        print(f"\n✗ Test file not found: {test_file}")
+        print(f"\n[ERROR] Test file not found: {test_file}")
         print("Please ensure the test file exists.")
         return
     
@@ -88,14 +88,14 @@ async def test_parsing_agent():
         async for event in app.astream(initial_state):
             for node_name, node_state in event.items():
                 if node_name == "file_analysis":
-                    print(f"\n[✓] File Analysis Agent completed")
+                    print(f"\n[OK] File Analysis Agent completed")
                     parsed_elements = node_state.get('parsed_elements_paths', [])
                     output_dir = node_state.get('output_dir')
                     if parsed_elements:
                         print(f"  Extracted {len(parsed_elements)} files")
                         print(f"  Output directory: {output_dir}")
                 elif node_name == "exploration":
-                    print(f"\n[✓] Exploration Agent completed")
+                    print(f"\n[OK] Exploration Agent completed")
                     discovered = node_state.get('discovered_components', {})
                     if discovered:
                         components = discovered.get('components', {})
@@ -108,7 +108,7 @@ async def test_parsing_agent():
                         print(f"    - Filters: {len(components.get('filters', []))}")
                         print(f"    - Parameters: {len(components.get('parameters', []))}")
                 elif node_name == "parsing":
-                    print(f"\n[✓] Parsing Agent completed")
+                    print(f"\n[OK] Parsing Agent completed")
                     final_state = node_state
         
         print("\n" + "="*80)
@@ -226,7 +226,7 @@ async def test_parsing_agent():
             for filename in expected_files:
                 filepath = os.path.join(output_dir, filename)
                 exists = os.path.exists(filepath)
-                print(f"  {'✓' if exists else '✗'} {filename}: {'Found' if exists else 'Missing'}")
+                print(f"  {'[OK]' if exists else '[MISSING]'} {filename}: {'Found' if exists else 'Missing'}")
                 if exists:
                     # Check file is valid JSON
                     try:
@@ -255,7 +255,7 @@ async def test_parsing_agent():
         
     except Exception as e:
         logger.error(f"Test failed: {e}", exc_info=True)
-        print(f"\n✗ ERROR: {e}")
+        print(f"\n[ERROR]: {e}")
         import traceback
         traceback.print_exc()
         return None
