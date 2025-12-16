@@ -38,6 +38,10 @@ async def main():
         parsed_dashboards=None,
         parsed_visualizations=None,
         parsed_datasources=None,
+        parsed_worksheets=None,
+        parsed_calculations=None,
+        parsed_filters=None,
+        parsed_parameters=None,
         # Specialized agent outputs
         calculation_analysis=None,
         visualization_analysis=None,
