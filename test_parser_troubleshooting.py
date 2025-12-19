@@ -2,7 +2,7 @@
 import json
 import os
 import xml.etree.ElementTree as ET
-from utils.xml_utils import _parse_instruction, _execute_instruction
+from utils.xml_utils import _parse_instruction, _execute_instruction, extract_features_from_xml
 from utils.logger import logger
 
 
@@ -172,5 +172,81 @@ def test_all_instructions_from_discovered():
                 print(f"  [SUCCESS] {feature_name}: {result.get('pattern')} - {result.get('result_type')}")
 
 
+def test_extract_features_from_xml():
+    """Test extract_features_from_xml function (full workflow as used by parsing agent)."""
+    discovered_file = "output/test_parsing_20251216_112457/discovered_components.json"
+    
+    if not os.path.exists(discovered_file):
+        print(f"Error: {discovered_file} not found")
+        return
+    
+    with open(discovered_file, 'r', encoding='utf-8') as f:
+        discovered = json.load(f)
+    
+    components = discovered.get('components', {})
+    
+    # Test dashboard extraction
+    dashboards = components.get('dashboards', [])
+    if dashboards:
+        dashboard = dashboards[0]
+        dashboard_id = dashboard.get('id', '')
+        dashboard_file = dashboard.get('file', '')
+        parsing_instructions = dashboard.get('parsing_instructions', {})
+        
+        print("\n" + "="*80)
+        print("TESTING FULL WORKFLOW: extract_features_from_xml")
+        print("="*80)
+        print(f"Dashboard: {dashboard.get('name')}")
+        print(f"ID: {dashboard_id}")
+        print(f"File: {dashboard_file}")
+        print(f"Features to extract: {list(parsing_instructions.keys())}")
+        
+        # Call extract_features_from_xml (same as parsing agent)
+        features = extract_features_from_xml(
+            dashboard_file,
+            dashboard_id,
+            parsing_instructions,
+            None  # feature_catalog
+        )
+        
+        print("\n" + "="*80)
+        print("EXTRACTION RESULTS")
+        print("="*80)
+        
+        success_count = 0
+        null_count = 0
+        failed_features = []
+        
+        for feature_name, value in features.items():
+            if value is None:
+                null_count += 1
+                failed_features.append(feature_name)
+                print(f"  [FAILED] {feature_name}: None")
+            elif value == [] or value == {}:
+                print(f"  [WARNING] {feature_name}: Empty ({type(value).__name__})")
+            else:
+                success_count += 1
+                print(f"  [SUCCESS] {feature_name}: {type(value).__name__} - {str(value)[:100]}...")
+        
+        print("\n" + "="*80)
+        print("SUMMARY")
+        print("="*80)
+        total_count = len(features)
+        print(f"Total features: {total_count}")
+        print(f"Success: {success_count}/{total_count} ({success_count*100//total_count if total_count > 0 else 0}%)")
+        print(f"Null values: {null_count}")
+        print(f"Empty values: {total_count - success_count - null_count}")
+        
+        if failed_features:
+            print(f"\nFailed features: {failed_features}")
+        
+        return features, failed_features
+
+
 if __name__ == "__main__":
+    # Test individual instructions
     test_all_instructions_from_discovered()
+    
+    # Test full workflow
+    print("\n\n")
+    test_extract_features_from_xml()

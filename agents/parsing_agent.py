@@ -67,8 +67,12 @@ def create_file_map(parsed_elements_paths: List[Dict[str, Any]]) -> Dict[str, st
     return {e.get('element_name'): e.get('file_path') for e in parsed_elements_paths if e.get('file_path')}
 
 
-def extract_dependencies(component: Dict[str, Any], all_components: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[str]]:
-    """Build dependency relationships for a component."""
+def extract_dependencies(
+    component: Dict[str, Any], 
+    features: Dict[str, Any], 
+    all_components: Dict[str, List[Dict[str, Any]]]
+) -> Dict[str, List[str]]:
+    """Build dependency relationships for a component from features and component data."""
     dependencies = {
         'worksheets': [],
         'datasources': [],
@@ -77,17 +81,128 @@ def extract_dependencies(component: Dict[str, Any], all_components: Dict[str, Li
         'calculations': []
     }
     
-    # Extract from component relationships or direct references
-    if 'worksheets' in component:
-        dependencies['worksheets'] = component.get('worksheets', [])
-    if 'datasources' in component:
-        dependencies['datasources'] = component.get('datasources', [])
-    if 'filters' in component:
-        dependencies['filters'] = component.get('filters', [])
-    if 'parameters' in component:
-        dependencies['parameters'] = component.get('parameters', [])
-    if 'calculations' in component:
-        dependencies['calculations'] = component.get('calculations', [])
+    def normalize_to_list(value):
+        """Convert value to list if it's a string or single item."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value] if value else []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            # Handle list of dicts - extract names/ids
+            if isinstance(value, list):
+                return value
+            # Single dict - try to extract name or id
+            if 'name' in value:
+                return [value['name']]
+            if 'id' in value:
+                return [value['id']]
+            return []
+        return [value] if value else []
+    
+    # Extract from parsed features (priority)
+    if features:
+        # Worksheets
+        if 'worksheets_used' in features:
+            deps = normalize_to_list(features.get('worksheets_used'))
+            if isinstance(deps, list):
+                # Handle list of dicts with 'name' key
+                worksheet_names = []
+                for item in deps:
+                    if isinstance(item, dict) and 'name' in item:
+                        worksheet_names.append(item['name'])
+                    elif isinstance(item, str):
+                        worksheet_names.append(item)
+                dependencies['worksheets'].extend(worksheet_names)
+            else:
+                dependencies['worksheets'].extend(deps)
+        
+        # Datasources
+        if 'datasources_used' in features:
+            deps = normalize_to_list(features.get('datasources_used'))
+            dependencies['datasources'].extend(deps)
+        elif 'datasources_referenced' in features:
+            deps = normalize_to_list(features.get('datasources_referenced'))
+            if isinstance(deps, list):
+                # Handle list of dicts with 'name' key
+                datasource_names = []
+                for item in deps:
+                    if isinstance(item, dict) and 'name' in item:
+                        datasource_names.append(item['name'])
+                    elif isinstance(item, str):
+                        datasource_names.append(item)
+                dependencies['datasources'].extend(datasource_names)
+            else:
+                dependencies['datasources'].extend(deps)
+        
+        # Filters
+        if 'filters' in features:
+            deps = normalize_to_list(features.get('filters'))
+            dependencies['filters'].extend(deps)
+        elif 'filters_in_zones' in features:
+            deps = normalize_to_list(features.get('filters_in_zones'))
+            if isinstance(deps, list):
+                # Handle list of dicts with 'name' or 'id' key
+                filter_refs = []
+                for item in deps:
+                    if isinstance(item, dict):
+                        if 'name' in item:
+                            filter_refs.append(item['name'])
+                        elif 'id' in item:
+                            filter_refs.append(item['id'])
+                    elif isinstance(item, str):
+                        filter_refs.append(item)
+                dependencies['filters'].extend(filter_refs)
+            else:
+                dependencies['filters'].extend(deps)
+        
+        # Calculations
+        if 'calculations' in features:
+            deps = normalize_to_list(features.get('calculations'))
+            dependencies['calculations'].extend(deps)
+        elif 'calculations_used' in features:
+            deps = normalize_to_list(features.get('calculations_used'))
+            dependencies['calculations'].extend(deps)
+    
+    # Extract from discovered component data (fallback/supplement)
+    if component:
+        # Worksheets
+        if 'worksheets_used' in component:
+            deps = normalize_to_list(component.get('worksheets_used'))
+            dependencies['worksheets'].extend(deps)
+        
+        # Datasources
+        if 'datasources_used' in component:
+            deps = normalize_to_list(component.get('datasources_used'))
+            dependencies['datasources'].extend(deps)
+        
+        # Filters
+        if 'filters_used' in component:
+            deps = normalize_to_list(component.get('filters_used'))
+            dependencies['filters'].extend(deps)
+        
+        # Calculations
+        if 'calculations' in component:
+            deps = normalize_to_list(component.get('calculations'))
+            dependencies['calculations'].extend(deps)
+    
+    # Remove duplicates while preserving order
+    for key in dependencies:
+        seen = set()
+        deduplicated = []
+        for x in dependencies[key]:
+            if not x:
+                continue
+            # Handle dicts - extract name or id for comparison
+            if isinstance(x, dict):
+                compare_val = x.get('name') or x.get('id') or str(x)
+            else:
+                compare_val = x
+            if compare_val and compare_val not in seen:
+                seen.add(compare_val)
+                deduplicated.append(x)
+        dependencies[key] = deduplicated
     
     return dependencies
 
@@ -127,6 +242,15 @@ def parse_dashboards(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Dashboard '{dashboard_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Dashboard '{dashboard_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -144,7 +268,7 @@ def parse_dashboards(
             structure = {'layout_type': 'unknown'}
         
         # Build dependencies
-        dependencies = extract_dependencies(dashboard, {})
+        dependencies = extract_dependencies(dashboard, features, {})
         
         parsed.append({
             'workbook_name': workbook_name,
@@ -191,6 +315,15 @@ def parse_worksheets(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Worksheet '{worksheet_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Worksheet '{worksheet_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -207,7 +340,7 @@ def parse_worksheets(
             structure = {'chart_type': 'unknown'}
         
         # Build dependencies
-        dependencies = extract_dependencies(worksheet, {})
+        dependencies = extract_dependencies(worksheet, features, {})
         
         parsed.append({
             'id': worksheet_id,
@@ -253,6 +386,15 @@ def parse_datasources(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Datasource '{datasource_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Datasource '{datasource_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -273,7 +415,7 @@ def parse_datasources(
             'name': datasource_name,
             'features': features,
             'structure': structure,
-            'dependencies': extract_dependencies(datasource, {})
+            'dependencies': extract_dependencies(datasource, features, {})
         })
     
     return parsed
@@ -316,6 +458,15 @@ def parse_calculations(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Calculation '{calc_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Calculation '{calc_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -342,7 +493,7 @@ def parse_calculations(
             'name': calc_name,
             'features': features,
             'structure': structure,
-            'dependencies': extract_dependencies(calculation, {})
+            'dependencies': extract_dependencies(calculation, features, {})
         })
     
     return parsed
@@ -382,6 +533,15 @@ def parse_filters(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Filter '{filter_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Filter '{filter_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -405,7 +565,7 @@ def parse_filters(
             }
         
         # Build dependencies
-        dependencies = extract_dependencies(filter_comp, {})
+        dependencies = extract_dependencies(filter_comp, features, {})
         
         parsed.append({
             'id': filter_id,
@@ -452,6 +612,15 @@ def parse_parameters(
                 catalog_guidance
             )
             
+            # Validate and report feature extraction
+            success_count = sum(1 for v in features.values() if v is not None and v != [] and v != {})
+            null_count = sum(1 for v in features.values() if v is None)
+            total_count = len(features)
+            logger.info(f"Parameter '{param_name}': Extracted {success_count}/{total_count} features ({null_count} null)")
+            if null_count > 0:
+                failed_features = [k for k, v in features.items() if v is None]
+                logger.warning(f"Parameter '{param_name}': Failed features: {failed_features}")
+            
             # Extract structure
             structure = extract_structure_from_xml(
                 file_path,
@@ -476,7 +645,7 @@ def parse_parameters(
             }
         
         # Build dependencies
-        dependencies = extract_dependencies(parameter, {})
+        dependencies = extract_dependencies(parameter, features, {})
         
         parsed.append({
             'id': param_id,

@@ -3,6 +3,8 @@ config
 dummy_data
 models
 services
+tableau_analyzer
+tableau_sql_agent
 tests
 utils
 workflows

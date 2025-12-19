@@ -1260,69 +1260,103 @@ def extract_features_from_xml(
         
         # Find component by ID/name if needed
         component_elem = root
+        found = False
         if component_id:
             # Clean component_id (remove braces if present)
             clean_id = component_id.strip('{}')
+            
+            logger.debug(f"Looking for component with ID: {component_id} (cleaned: {clean_id})")
             
             # For dashboards, the XML structure is: <dashboards><dashboard name="...">
             # The component_id is a GUID, but XML might only have name attribute
             # Try to find by matching the component name from discovered_components
             
-            # First, try to find by exact ID match
-            found = False
-            for elem in root.iter():
-                elem_id = elem.get('id', '')
-                if elem_id and (component_id == elem_id or clean_id in elem_id or elem_id in component_id):
-                    component_elem = elem
-                    found = True
-                    break
-            
-            # If not found by ID, try to find by element type
+            # PRIORITY 1: Try to find by element type first (more reliable)
             # For dashboards, look for <dashboard> element
-            if not found:
-                # Check if this is a dashboard file - look for dashboard element
-                dashboard_elem = root.find('.//dashboard')
-                if dashboard_elem is not None:
+            dashboard_elem = root.find('.//dashboard')
+            if dashboard_elem is not None:
+                # Check if dashboard has matching UUID in simple-id or matches component_id
+                simple_id_elem = dashboard_elem.find('.//simple-id[@uuid]')
+                if simple_id_elem is not None:
+                    uuid_attr = simple_id_elem.get('uuid', '')
+                    if component_id == uuid_attr or clean_id in uuid_attr or uuid_attr in component_id:
+                        component_elem = dashboard_elem
+                        found = True
+                        logger.debug(f"Found dashboard element by UUID: tag={dashboard_elem.tag}, name={dashboard_elem.get('name', 'N/A')}")
+                else:
+                    # No UUID match, but if it's a dashboard file, use the dashboard element
                     component_elem = dashboard_elem
                     found = True
-                
-                # For worksheets, look for worksheet with matching name/id
-                elif root.find('.//worksheet') is not None:
-                    # Try to find worksheet by name or id
-                    for worksheet in root.findall('.//worksheet'):
-                        ws_name = worksheet.get('name', '')
-                        ws_id = worksheet.get('id', '')
-                        if component_id in ws_name or component_id in ws_id or ws_name in component_id:
-                            component_elem = worksheet
-                            found = True
-                            break
-                
-                # For datasources, look for datasource element
-                elif root.find('.//datasource') is not None:
-                    datasource_elem = root.find('.//datasource')
-                    if datasource_elem is not None:
-                        component_elem = datasource_elem
+                    logger.debug(f"Found dashboard element (no UUID check): tag={dashboard_elem.tag}, name={dashboard_elem.get('name', 'N/A')}")
+            
+            # For worksheets, look for worksheet with matching name/id
+            elif root.find('.//worksheet') is not None:
+                # Try to find worksheet by name or id
+                for worksheet in root.findall('.//worksheet'):
+                    ws_name = worksheet.get('name', '')
+                    ws_id = worksheet.get('id', '')
+                    if component_id == ws_id or clean_id == ws_id or component_id in ws_name or ws_name in component_id:
+                        component_elem = worksheet
                         found = True
+                        logger.debug(f"Found worksheet element: tag={worksheet.tag}, id={ws_id}, name={ws_name}")
+                        break
+            
+            # For datasources, look for datasource element
+            elif root.find('.//datasource') is not None:
+                datasource_elem = root.find('.//datasource')
+                if datasource_elem is not None:
+                    component_elem = datasource_elem
+                    found = True
+                    logger.debug(f"Found datasource element: tag={datasource_elem.tag}, name={datasource_elem.get('name', 'N/A')}")
+            
+            # FALLBACK: Try to find by exact ID match (only if not found by type)
+            if not found:
+                for elem in root.iter():
+                    elem_id = elem.get('id', '')
+                    # Only match if it's an exact match or the component_id is a GUID-like string
+                    if elem_id and (component_id == elem_id or (len(clean_id) > 10 and clean_id in elem_id)):
+                        component_elem = elem
+                        found = True
+                        logger.debug(f"Found component by ID match: tag={elem.tag}, id={elem_id}, name={elem.get('name', 'N/A')}")
+                        break
+        
+        # Log component element details
+        logger.info(f"Using component element: tag={component_elem.tag}, id={component_elem.get('id', 'N/A')}, name={component_elem.get('name', 'N/A')}, found={found}")
         
         # Extract each feature using parsing instructions
+        logger.info(f"Extracting {len(parsing_instructions)} features from {file_path}")
+        success_count = 0
+        null_count = 0
+        
         for feature_name, instruction in parsing_instructions.items():
-            # Tier 1: Try pattern matching on instruction
-            parsed_instruction = _parse_instruction(instruction)
-            value = _execute_instruction(component_elem, parsed_instruction)
-            
-            # Tier 2: If pattern matching failed, try feature_catalog fallback
-            if value is None and feature_catalog:
-                catalog_guidance = feature_catalog.get('parsing_guidance', {}).get(feature_name)
-                if catalog_guidance:
-                    parsed_instruction = _parse_instruction(catalog_guidance)
-                    value = _execute_instruction(component_elem, parsed_instruction)
-            
-            # Tier 3: If still None, log warning
-            if value is None:
-                logger.warning(f"Could not extract feature '{feature_name}' from {file_path}")
+            try:
+                # Tier 1: Try pattern matching on instruction
+                parsed_instruction = _parse_instruction(instruction)
+                value = _execute_instruction(component_elem, parsed_instruction)
+                
+                # Tier 2: If pattern matching failed, try feature_catalog fallback
+                if value is None and feature_catalog:
+                    catalog_guidance = feature_catalog.get('parsing_guidance', {}).get(feature_name)
+                    if catalog_guidance:
+                        logger.debug(f"Trying catalog fallback for feature '{feature_name}'")
+                        parsed_instruction = _parse_instruction(catalog_guidance)
+                        value = _execute_instruction(component_elem, parsed_instruction)
+                
+                # Tier 3: If still None, log warning
+                if value is None:
+                    logger.warning(f"Could not extract feature '{feature_name}' from {file_path} (instruction: {instruction[:100]})")
+                    features[feature_name] = None
+                    null_count += 1
+                else:
+                    features[feature_name] = value
+                    success_count += 1
+                    logger.debug(f"Successfully extracted feature '{feature_name}': {type(value).__name__}")
+            except Exception as e:
+                logger.error(f"Error extracting feature '{feature_name}': {e}", exc_info=True)
                 features[feature_name] = None
-            else:
-                features[feature_name] = value
+                null_count += 1
+        
+        logger.info(f"Feature extraction complete: {success_count} successful, {null_count} null, {len(parsing_instructions)} total")
         
         return features
     
