@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau to Looker Migration - Agent Approach Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+        }
+        
+        .approach-card {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .approach-card h4 {
+            color: #667eea;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+        
+        .approach-card.pros {
+            border-left-color: #28a745;
+        }
+        
+        .approach-card.cons {
+            border-left-color: #dc3545;
+        }
+        
+        .approach-card.selected {
+            border-left-color: #ffc107;
+            background: #fff9e6;
+            border-width: 5px;
+        }
+        
+        .approach-card.selected h4 {
+            color: #ff9800;
+        }
+        
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .comparison-table th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .comparison-table td {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .comparison-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .comparison-table tr:hover {
+            background: #e9ecef;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 2px;
+        }
+        
+        .badge-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .badge-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .badge-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .architecture-diagram {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .highlight {
+            background: #fff9e6;
+            padding: 20px;
+            border-left: 5px solid #ffc107;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .highlight h4 {
+            color: #ff9800;
+            margin-bottom: 10px;
+        }
+        
+        ul, ol {
+            margin-left: 30px;
+            margin-top: 10px;
+        }
+        
+        li {
+            margin: 8px 0;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .footer {
+            background: #333;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 20px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #667eea;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -25px;
+            top: 5px;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 3px solid white;
+            box-shadow: 0 0 0 3px #667eea;
+        }
+        
+        .timeline-item h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Tableau to Looker Migration</h1>
+            <p>Agent Architecture Approach Comparison & Decision</p>
+        </header>
+        
+        <div class="content">
+            <section class="section">
+                <h2>📋 Executive Summary</h2>
+                <p>This document outlines the evolution of our agent-based approach for converting Tableau XML workbooks into a structured, queryable format for migration assessment. After evaluating multiple architectural patterns, we have selected <strong>xml_to_dict_agent.py</strong> as our production approach.</p>
+                
+                <div class="highlight">
+                    <h4>✅ Final Decision: Unified Workflow (xml_to_dict_agent.py + complexity_analysis_agent.py)</h4>
+                    <p><strong>Rationale:</strong> The unified workflow combines the best of both worlds:</p>
+                    <ul>
+                        <li><strong>Ingestion Agent:</strong> Tool-based architecture with comprehensive relational database schema</li>
+                        <li><strong>Complexity Analysis Agent:</strong> Hybrid rule-based + LLM approach for intelligent feature assessment</li>
+                        <li><strong>Unified Workflow:</strong> Sequential execution with clear state management and error handling</li>
+                        <li><strong>Production Ready:</strong> Complete end-to-end pipeline from XML parsing to complexity reporting</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>🔄 Evolution Timeline</h2>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <h4>Approach 1: test_parsing_agent.py</h4>
+                        <p><strong>Architecture:</strong> 3-Agent Sequential Workflow</p>
+                        <p>File Analysis → Exploration → Parsing</p>
+                        <p><strong>Status:</strong> <span class="badge badge-warning">Evaluated</span></p>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h4>Approach 2: test_agent_1_enhanced.py</h4>
+                        <p><strong>Architecture:</strong> Multi-Pass Exploration with Retry Logic</p>
+                        <p>Enhanced Agent 1 with completeness evaluation</p>
+                        <p><strong>Status:</strong> <span class="badge badge-warning">Evaluated</span></p>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h4>Approach 3: xml_to_dict_simple_workflow.py</h4>
+                        <p><strong>Architecture:</strong> Simple 2-Agent Workflow (UML Pattern)</p>
+                        <p>Parsing Agent + Strategy Agent</p>
+                        <p><strong>Status:</strong> <span class="badge badge-warning">POC</span></p>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h4>Approach 4: xml_to_dict_agent.py</h4>
+                        <p><strong>Architecture:</strong> Tool-Based Agents with LangGraph</p>
+                        <p>Ingestion Agent + Query Agent</p>
+                        <p><strong>Status:</strong> <span class="badge badge-success">✅ SELECTED</span></p>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h4>Approach 5: Complexity Analysis Agent</h4>
+                        <p><strong>Architecture:</strong> Hybrid Rule-Based + LLM Complexity Assessment</p>
+                        <p>Per-instance complexity analysis for visualizations, calculated fields, and dashboards</p>
+                        <p><strong>Status:</strong> <span class="badge badge-success">✅ IMPLEMENTED</span></p>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h4>Approach 6: Unified Workflow</h4>
+                        <p><strong>Architecture:</strong> Sequential Workflow Chaining</p>
+                        <p>Ingestion Agent → Complexity Analysis Agent</p>
+                        <p><strong>Status:</strong> <span class="badge badge-success">✅ PRODUCTION</span></p>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>🔍 Detailed Approach Analysis</h2>
+                
+                <div class="approach-card">
+                    <h4>1. test_parsing_agent.py - 3-Agent Sequential Workflow</h4>
+                    <p><strong>File:</strong> <code>test_parsing_agent.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+File Analysis Agent → Exploration Agent → Parsing Agent
+                    </div>
+                    
+                    <h5>Pros:</h5>
+                    <ul>
+                        <li>Clear separation of concerns</li>
+                        <li>Each agent has a specific responsibility</li>
+                        <li>Good for complex parsing requirements</li>
+                    </ul>
+                    
+                    <h5>Cons:</h5>
+                    <ul>
+                        <li>Too many agents for the use case</li>
+                        <li>Complex state management across agents</li>
+                        <li>Over-engineered for XML to JSON conversion</li>
+                        <li>No built-in query capabilities</li>
+                    </ul>
+                </div>
+                
+                <div class="approach-card">
+                    <h4>2. test_agent_1_enhanced.py - Multi-Pass Exploration</h4>
+                    <p><strong>File:</strong> <code>tableau_analyzer/tests/test_agent_1_enhanced.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+Agent 1 Enhanced:
+- Multi-pass exploration
+- Retry logic with self-reflection
+- On-demand deep dives
+- Completeness evaluation
+                    </div>
+                    
+                    <h5>Pros:</h5>
+                    <ul>
+                        <li>Robust exploration with retry mechanisms</li>
+                        <li>Self-evaluation of completeness</li>
+                        <li>Good for complex Tableau structures</li>
+                    </ul>
+                    
+                    <h5>Cons:</h5>
+                    <ul>
+                        <li>Part of larger tableau_analyzer system</li>
+                        <li>Not standalone for migration assessment</li>
+                        <li>No relational database integration</li>
+                        <li>Limited query capabilities</li>
+                    </ul>
+                </div>
+                
+                <div class="approach-card">
+                    <h4>3. xml_to_dict_simple_workflow.py - Simple 2-Agent Workflow</h4>
+                    <p><strong>File:</strong> <code>evaluations/xml_to_dict_simple_workflow.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+Parsing Agent (Exploration + Parsing) → Strategy Agent (Analysis + Recommendations)
+                    </div>
+                    
+                    <h5>Pros:</h5>
+                    <ul>
+                        <li>Simple, clean architecture</li>
+                        <li>Follows UML pattern</li>
+                        <li>Good for POC demonstrations</li>
+                        <li>Easy to understand</li>
+                    </ul>
+                    
+                    <h5>Cons:</h5>
+                    <ul>
+                        <li>Simplified database schema (only raw JSON + schema)</li>
+                        <li>No relational table ingestion</li>
+                        <li>Limited query capabilities</li>
+                        <li>Not production-ready</li>
+                    </ul>
+                </div>
+                
+                <div class="approach-card selected">
+                    <h4>4. xml_to_dict_agent.py - Tool-Based Architecture ⭐ SELECTED</h4>
+                    <p><strong>File:</strong> <code>evaluations/xml_to_dict_agent.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+Ingestion Agent (Tool-Based):
+  - initialize_database
+  - list_xml_files
+  - convert_and_store_files
+  - ingest_to_tables
+  - get_table_counts
+  
+Query Agent (SQL Agent):
+  - Natural language queries
+  - SQL generation
+  - Migration insights
+                    </div>
+                    
+                    <h5>Key Features:</h5>
+                    <ul>
+                        <li><strong>Tool-Based Design:</strong> Uses LangChain @tool decorators for clean, reusable functions</li>
+                        <li><strong>Comprehensive Database Schema:</strong> 9 relational tables (workbooks, datasources, fields, worksheets, dashboards, etc.)</li>
+                        <li><strong>SQL Ingestion Queries:</strong> Automated extraction from JSON to relational tables</li>
+                        <li><strong>Natural Language Querying:</strong> SQL Agent for interactive analysis</li>
+                        <li><strong>Dual Mode Operation:</strong> Ingestion mode and Query mode</li>
+                    </ul>
+                    
+                    <h5>Database Schema:</h5>
+                    <div class="code-block">
+raw_tableau_files (raw JSON storage)
+json_schema (unified schema)
+workbooks (workbook metadata)
+datasources (data connections)
+fields (columns & calculations)
+parameters (workbook parameters)
+worksheets (chart definitions)
+worksheet_elements (panes & marks)
+dashboards (dashboard layouts)
+dashboard_components (dashboard content)
+actions (filter/URL actions)
+                    </div>
+                </div>
+                
+                <div class="approach-card selected">
+                    <h4>5. Complexity Analysis Agent - Hybrid Assessment ⭐ NEW</h4>
+                    <p><strong>File:</strong> <code>evaluations/complexity_analysis_agent.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+Complexity Analysis Agent (Tool-Based):
+  - analyze_visualization_complexity
+  - analyze_calculated_field_complexity
+  - analyze_dashboard_complexity
+  
+Hybrid Approach:
+  - Rule-based assessment (primary)
+  - LLM fallback (ambiguous cases)
+  - Per-instance complexity output
+                    </div>
+                    
+                    <h5>Key Features:</h5>
+                    <ul>
+                        <li><strong>Hybrid Assessment:</strong> Rule-based logic for standard cases, LLM for edge cases</li>
+                        <li><strong>JSON Configuration:</strong> Complexity rules stored in <code>config/complexity_rules.json</code> for easy maintenance</li>
+                        <li><strong>Per-Instance Analysis:</strong> Each feature instance analyzed individually with full context</li>
+                        <li><strong>SQL Agent Integration:</strong> Dynamic query generation for data retrieval</li>
+                        <li><strong>Structured Output:</strong> JSON format with feature_area, feature, complexity, and context</li>
+                    </ul>
+                    
+                    <h5>Complexity Levels:</h5>
+                    <ul>
+                        <li><strong>Low:</strong> Simple features easily migratable to Looker</li>
+                        <li><strong>Medium:</strong> Features requiring moderate effort or custom work</li>
+                        <li><strong>High:</strong> Complex features needing significant rework</li>
+                        <li><strong>Critical:</strong> Features that may not be directly migratable</li>
+                    </ul>
+                    
+                    <h5>Analysis Coverage:</h5>
+                    <div class="code-block">
+Visualizations: Charts, mark classes, encoding complexity
+Calculated Fields: Formula patterns, LOD expressions, table calculations
+Dashboards: Component count, action types, multi-tile detection
+Actions: Filter actions, URL actions, highlight actions
+                    </div>
+                </div>
+                
+                <div class="approach-card selected">
+                    <h4>6. Unified Workflow - End-to-End Pipeline ⭐ PRODUCTION</h4>
+                    <p><strong>File:</strong> <code>evaluations/unified_tableau_workflow.py</code></p>
+                    <p><strong>Architecture:</strong></p>
+                    <div class="architecture-diagram">
+Sequential Workflow (LangGraph):
+  Step 1: Ingestion Agent
+    → Parse XML files
+    → Store in PostgreSQL
+    → Populate relational tables
+  
+  Step 2: Complexity Analysis Agent
+    → Analyze visualizations
+    → Analyze calculated fields
+    → Analyze dashboards
+    → Generate complexity report
+                    </div>
+                    
+                    <h5>Key Features:</h5>
+                    <ul>
+                        <li><strong>Sequential Execution:</strong> Clear workflow from ingestion to analysis</li>
+                        <li><strong>State Management:</strong> Unified state tracks progress across agents</li>
+                        <li><strong>Flexible Execution:</strong> Can run full workflow, skip ingestion, or run analysis only</li>
+                        <li><strong>Fresh Start Option:</strong> Default truncates tables for clean runs</li>
+                        <li><strong>Error Handling:</strong> Comprehensive error tracking and reporting</li>
+                    </ul>
+                    
+                    <h5>Usage:</h5>
+                    <div class="code-block">
+# Full workflow (default)
+python evaluations/unified_tableau_workflow.py
+
+# Skip ingestion (data already loaded)
+python evaluations/unified_tableau_workflow.py --skip-ingestion
+
+# Complexity analysis only
+python evaluations/unified_tableau_workflow.py --complexity-only
+
+# No fresh start (append to existing data)
+python evaluations/unified_tableau_workflow.py --no-fresh
+                    </div>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>📊 Comparison Matrix</h2>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>test_parsing_agent</th>
+                            <th>test_agent_1_enhanced</th>
+                            <th>xml_to_dict_simple</th>
+                            <th>xml_to_dict_agent</th>
+                            <th>Complexity Agent</th>
+                            <th>Unified Workflow ⭐</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Architecture Complexity</strong></td>
+                            <td>High (3 agents)</td>
+                            <td>Medium (enhanced single agent)</td>
+                            <td>Low (2 agents)</td>
+                            <td>Optimal (tool-based)</td>
+                            <td>Optimal (tool-based)</td>
+                            <td><span class="badge badge-success">Optimal (sequential)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Database Schema</strong></td>
+                            <td>Limited</td>
+                            <td>None</td>
+                            <td>Simplified (2 tables)</td>
+                            <td>Comprehensive (9 tables)</td>
+                            <td>Uses existing schema</td>
+                            <td><span class="badge badge-success">Comprehensive (9 tables)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Relational Ingestion</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>✅ Yes</td>
+                            <td>N/A (reads from DB)</td>
+                            <td><span class="badge badge-success">✅ Yes</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Complexity Analysis</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td><span class="badge badge-success">✅ Hybrid (Rule+LLM)</span></td>
+                            <td><span class="badge badge-success">✅ Hybrid (Rule+LLM)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Query Capabilities</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ Limited</td>
+                            <td>⚠️ Basic SQL</td>
+                            <td>✅ Natural Language</td>
+                            <td>✅ SQL Agent</td>
+                            <td><span class="badge badge-success">✅ Natural Language</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tool-Based Design</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>✅ Yes</td>
+                            <td>✅ Yes</td>
+                            <td><span class="badge badge-success">✅ Yes</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Configuration Management</strong></td>
+                            <td>❌ Hard-coded</td>
+                            <td>❌ Hard-coded</td>
+                            <td>❌ Hard-coded</td>
+                            <td>⚠️ Partial</td>
+                            <td><span class="badge badge-success">✅ JSON-based</span></td>
+                            <td><span class="badge badge-success">✅ JSON-based</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Per-Instance Analysis</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td><span class="badge badge-success">✅ Yes</span></td>
+                            <td><span class="badge badge-success">✅ Yes</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>End-to-End Workflow</strong></td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>⚠️ Partial</td>
+                            <td>⚠️ Standalone</td>
+                            <td><span class="badge badge-success">✅ Complete</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Maintainability</strong></td>
+                            <td>⚠️ Medium</td>
+                            <td>⚠️ Medium</td>
+                            <td>✅ Good</td>
+                            <td>✅ Excellent</td>
+                            <td>✅ Excellent</td>
+                            <td><span class="badge badge-success">✅ Excellent</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Scalability</strong></td>
+                            <td>⚠️ Medium</td>
+                            <td>⚠️ Medium</td>
+                            <td>⚠️ Limited</td>
+                            <td>✅ High</td>
+                            <td>✅ High</td>
+                            <td><span class="badge badge-success">✅ High</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Production Ready</strong></td>
+                            <td>❌ No</td>
+                            <td>⚠️ Part of larger system</td>
+                            <td>❌ POC only</td>
+                            <td>✅ Yes</td>
+                            <td>✅ Yes</td>
+                            <td><span class="badge badge-success">✅ Yes</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+            
+            <section class="section">
+                <h2>🎯 Why xml_to_dict_agent.py?</h2>
+                
+                <h3>1. Tool-Based Architecture</h3>
+                <p>The use of LangChain's <code>@tool</code> decorator provides:</p>
+                <ul>
+                    <li><strong>Reusability:</strong> Tools can be used independently or by agents</li>
+                    <li><strong>Testability:</strong> Each tool is a standalone function</li>
+                    <li><strong>Maintainability:</strong> Clear separation of concerns</li>
+                    <li><strong>Extensibility:</strong> Easy to add new tools</li>
+                </ul>
+                
+                <h3>2. Comprehensive Relational Schema</h3>
+                <p>Unlike other approaches that only store raw JSON, this approach:</p>
+                <ul>
+                    <li>Extracts structured data into 9 relational tables</li>
+                    <li>Enables efficient SQL queries</li>
+                    <li>Supports complex relationships (workbooks → datasources → fields)</li>
+                    <li>Provides referential integrity</li>
+                </ul>
+                
+                <h3>3. Automated Ingestion</h3>
+                <p>SQL-based ingestion queries automatically:</p>
+                <ul>
+                    <li>Extract workbooks, datasources, fields from JSON</li>
+                    <li>Parse worksheets and dashboard structures</li>
+                    <li>Handle nested relationships</li>
+                    <li>Maintain data consistency</li>
+                </ul>
+                
+                <h3>4. Natural Language Querying</h3>
+                <p>The SQL Agent enables:</p>
+                <ul>
+                    <li>Interactive exploration of Tableau metadata</li>
+                    <li>Natural language questions (e.g., "How many calculated fields exist?")</li>
+                    <li>Automatic SQL generation</li>
+                    <li>Migration assessment insights</li>
+                </ul>
+                
+                <h3>5. Dual Mode Operation</h3>
+                <p>Supports both:</p>
+                <ul>
+                    <li><strong>Ingestion Mode:</strong> Process XML files and populate database</li>
+                    <li><strong>Query Mode:</strong> Interactive analysis of processed data</li>
+                </ul>
+            </section>
+            
+            <section class="section">
+                <h2>🏗️ Architecture Diagram</h2>
+                <div class="architecture-diagram">
+                    <pre>
+┌─────────────────────────────────────────────────────────────┐
+│                    XML Tableau Files                        │
+│              (input_files/tableau/*.xml)                    │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Unified Workflow (LangGraph StateGraph)              │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Step 1: Ingestion Agent                                │  │
+│  │  Tools:                                                │  │
+│  │  • initialize_database()                               │  │
+│  │  • list_xml_files()                                    │  │
+│  │  • convert_and_store_files()                           │  │
+│  │  • ingest_to_tables()                                  │  │
+│  │  • get_table_counts()                                  │  │
+│  └──────────────────────┬─────────────────────────────────┘  │
+│                         │                                    │
+│                         ▼                                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              PostgreSQL Database                       │  │
+│  │  • raw_tableau_files (JSONB)                          │  │
+│  │  • json_schema                                        │  │
+│  │  • workbooks                                          │  │
+│  │  • datasources                                        │  │
+│  │  • fields                                             │  │
+│  │  • worksheets                                         │  │
+│  │  • worksheet_elements                                 │  │
+│  │  • dashboards                                         │  │
+│  │  • dashboard_components                               │  │
+│  │  • actions                                            │  │
+│  └──────────────────────┬─────────────────────────────────┘  │
+│                         │                                    │
+│                         ▼                                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Step 2: Complexity Analysis Agent                     │  │
+│  │  Tools:                                                │  │
+│  │  • analyze_visualization_complexity()                  │  │
+│  │  • analyze_calculated_field_complexity()              │  │
+│  │  • analyze_dashboard_complexity()                     │  │
+│  │                                                        │  │
+│  │  Hybrid Assessment:                                    │  │
+│  │  • Rule-based (config/complexity_rules.json)          │  │
+│  │  • LLM fallback (Vertex AI Gemini)                    │  │
+│  └──────────────────────┬─────────────────────────────────┘  │
+│                         │                                    │
+│                         ▼                                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         Complexity Analysis Results (JSON)            │  │
+│  │  • Per-instance complexity assessment                 │  │
+│  │  • Feature area, feature, complexity level            │  │
+│  │  • Context: workbook, worksheet, dashboard names     │  │
+│  │  • Saved to: complexity_analysis_results.json        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Query Agent (SQL Agent) - Optional                   │  │
+│  │  Natural Language → SQL → Insights                    │  │
+│  │  Example: "How many high complexity features exist?"  │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                    </pre>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>💡 Key Benefits</h2>
+                
+                <div class="highlight">
+                    <h4>1. Production-Ready Pipeline</h4>
+                    <p>Complete end-to-end workflow from XML ingestion to complexity analysis with comprehensive error handling, database transactions, and robust SQL queries.</p>
+                </div>
+                
+                <div class="highlight">
+                    <h4>2. Hybrid Complexity Assessment</h4>
+                    <p>Combines rule-based logic for standard cases with LLM intelligence for edge cases, ensuring accurate and consistent complexity evaluation while handling ambiguous scenarios.</p>
+                </div>
+                
+                <div class="highlight">
+                    <h4>3. Queryable Data Model</h4>
+                    <p>The relational schema enables complex queries for migration assessment, such as identifying all calculated fields, dashboard dependencies, and data source connections.</p>
+                </div>
+                
+                <div class="highlight">
+                    <h4>4. Per-Instance Analysis</h4>
+                    <p>Each feature instance is analyzed individually with full context (workbook, worksheet, dashboard names), providing granular insights for migration planning.</p>
+                </div>
+                
+                <div class="highlight">
+                    <h4>5. Extensible Architecture</h4>
+                    <p>New tools can be easily added (e.g., export_to_looker, generate_migration_report) without modifying core agent logic. JSON-based configuration allows easy rule updates.</p>
+                </div>
+                
+                <div class="highlight">
+                    <h4>6. Natural Language Interface</h4>
+                    <p>SQL Agent enables non-technical users to query Tableau metadata using natural language, making migration assessment accessible to all stakeholders.</p>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>📈 Current Status & Next Steps</h2>
+                
+                <div class="highlight">
+                    <h4>✅ Completed</h4>
+                    <ul>
+                        <li><strong>Ingestion Pipeline:</strong> xml_to_dict_agent.py with comprehensive relational schema</li>
+                        <li><strong>Complexity Analysis:</strong> Hybrid rule-based + LLM agent for feature assessment</li>
+                        <li><strong>Unified Workflow:</strong> End-to-end pipeline from XML ingestion to complexity analysis</li>
+                        <li><strong>Configuration Management:</strong> JSON-based complexity rules for easy maintenance</li>
+                        <li><strong>Per-Instance Analysis:</strong> Detailed complexity assessment for each feature instance</li>
+                    </ul>
+                </div>
+                
+                <h3>Next Steps</h3>
+                <ol>
+                    <li><strong>Report Generation:</strong> Generate HTML migration assessment reports from complexity analysis results</li>
+                    <li><strong>Looker Mapping:</strong> Add tools to map Tableau features to Looker equivalents</li>
+                    <li><strong>Migration Recommendations:</strong> Generate actionable migration strategies based on complexity</li>
+                    <li><strong>Integration:</strong> Connect with Looker API for automated migration suggestions</li>
+                    <li><strong>Enhanced Analysis:</strong> Add datasource compatibility analysis and parameter complexity</li>
+                    <li><strong>Visualization:</strong> Create dashboards for complexity distribution and migration planning</li>
+                </ol>
+            </section>
+        </div>
+        
+        <div class="footer">
+            <p>Tableau to Looker Migration Project | Agent Architecture Decision Document</p>
+            <p>Generated: <span id="date"></span></p>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('date').textContent = new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+    </script>
+</body>
+</html>

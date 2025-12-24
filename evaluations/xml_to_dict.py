@@ -44,7 +44,7 @@ def generate_schema(json_data: Union[dict, list[dict]]) -> dict:
     
     # Handle both single dict and list of dicts
     if isinstance(json_data, dict):
-        builder.add_object(json_data)
+    builder.add_object(json_data)
     elif isinstance(json_data, list):
         if not json_data:
             raise ValueError("Cannot generate schema from empty list")
@@ -156,7 +156,7 @@ def main():
     # Validate all files exist
     valid_paths = []
     for xml_path in xml_paths:
-        if not Path(xml_path).exists():
+    if not Path(xml_path).exists():
             print(f"⚠️  Warning: File not found: {xml_path}, skipping...")
             continue
         valid_paths.append(xml_path)
@@ -181,7 +181,7 @@ def main():
         json_data_list.append(json_data)
         
         # Save individual JSON file
-        json_file = output_dir / f"{Path(xml_path).stem}.json"
+    json_file = output_dir / f"{Path(xml_path).stem}.json"
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(json_data, f, indent=2, ensure_ascii=False)
         print(f"      ✅ Saved: {json_file}")

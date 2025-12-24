@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau to Looker Migration Assessment Report</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        /* Header Section */
+        .report-header {
+            background: linear-gradient(135deg, #2d7d4a 0%, #1a5c35 100%);
+            color: white;
+            padding: 40px;
+            position: relative;
+        }
+        
+        .logo-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            width: 180px;
+            height: 50px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.3em;
+            color: #2d7d4a;
+            letter-spacing: -1px;
+        }
+        
+        .report-header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+        
+        .report-metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .metadata-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .metadata-label {
+            font-size: 0.85em;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metadata-value {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+        
+        /* Section Styles */
+        .section {
+            padding: 40px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: #2d7d4a;
+            margin-bottom: 25px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #2d7d4a;
+        }
+        
+        .section-subtitle {
+            font-size: 1.4em;
+            color: #1a5c35;
+            margin: 30px 0 15px 0;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+        
+        thead {
+            background: #2d7d4a;
+            color: white;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        tbody tr:nth-child(even) {
+            background: #fafbfc;
+        }
+        
+        /* Complexity Badges */
+        .complexity-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .complexity-low {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .complexity-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .complexity-high {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .complexity-critical {
+            background: #dc3545;
+            color: white;
+        }
+        
+        /* Effort Box */
+        .effort-box {
+            background: linear-gradient(135deg, #2d7d4a 0%, #1a5c35 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .effort-label {
+            font-size: 1em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .effort-value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        .effort-detail {
+            font-size: 1em;
+            opacity: 0.85;
+            margin-top: 5px;
+        }
+        
+        /* Chart Container */
+        .chart-container {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .chart-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        
+        /* Footer */
+        .report-footer {
+            background: #2c3e50;
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        /* Print Styles */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+            }
+            
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+        
+        /* Utility Classes */
+        .text-center {
+            text-align: center;
+        }
+        
+        .mb-20 {
+            margin-bottom: 20px;
+        }
+        
+        .mt-20 {
+            margin-top: 20px;
+        }
+        
+        .formula-text {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="report-header">
+            <div class="logo-container">
+                <div class="logo">SQUARESHIFT</div>
+            </div>
+            <h1>Tableau to Looker Migration Assessment Report</h1>
+            <div class="report-metadata">
+                <div class="metadata-item">
+                    <span class="metadata-label">Date Generated</span>
+                    <span class="metadata-value">December 23, 2025 - 09:08 PM</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Total Workbooks</span>
+                    <span class="metadata-value">2</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Total Dashboards</span>
+                    <span class="metadata-value">6</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Total Worksheets</span>
+                    <span class="metadata-value">88</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. Executive Summary -->
+        <div class="section">
+            <h2 class="section-title">1. Executive Summary</h2>
+            
+            <p style="margin-bottom: 20px; font-size: 1.05em; line-height: 1.8;">
+                This assessment analyzed the Tableau environment (2 workbooks, 6 dashboards, 88 worksheets) 
+                focusing on inventory, usage, and complexity to inform the Looker migration strategy.
+            </p>
+
+            <div class="chart-container">
+                <div class="chart-title">High-Level Complexity Overview</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Complexity Level</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="complexity-badge complexity-low">Low</span></td>
+                            <td>5993</td>
+                        </tr>
+                        <tr>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>163</td>
+                        </tr>
+                        <tr>
+                            <td><span class="complexity-badge complexity-high">High</span></td>
+                            <td>6</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="chart-container mt-20">
+                <div class="chart-title">Key Findings</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th>Complexity / Impact</th>
+                            <th>Workbooks Affected</th>
+                            <th>Dashboards Affected</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Actions</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>2 workbooks</td>
+                            <td>6 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Calculated Fields</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>2 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Calculated Fields</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>2 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Charts</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>1 workbooks</td>
+                            <td>0 dashboards</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dashboards</strong></td>
+                            <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                            <td>2 workbooks</td>
+                            <td>6 dashboards</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="effort-box">
+                <div class="effort-label">Estimated Migration Effort</div>
+                <div class="effort-value">TBD</div>
+                <div class="effort-detail">(Based on complexity analysis)</div>
+            </div>
+        </div>
+
+        <!-- 2. Inventory Summary -->
+        <div class="section">
+            <h2 class="section-title">2. Inventory Summary</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Asset Type</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Total Workbooks Assessed</strong></td>
+                        <td>{stats['total_workbooks']}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Dashboards</strong></td>
+                        <td>{stats['total_dashboards']}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Worksheets</strong></td>
+                        <td>{stats['total_worksheets']}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 3. Complexity Analysis -->
+        <div class="section">
+            <h2 class="section-title">3. Complexity Analysis</h2>
+            
+            <h3 class="section-subtitle">3.1 Visualization Complexity Breakdown</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature Area</th>
+                        <th>Feature</th>
+                        <th>Complexity</th>
+                        <th>Workbooks Affected</th>
+                        <th>Dashboards Affected</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Bar Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Line Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Multipolygon</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Square Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>2</td>
+                        <td>0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Charts</strong></td>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>1</td>
+                        <td>0</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 class="section-subtitle">3.2 Calculated Field Complexity Breakdown</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature Area</th>
+                        <th>Feature</th>
+                        <th>Complexity</th>
+                        <th>Workbooks Affected</th>
+                        <th>Worksheets Affected</th>
+                        <th>Example Fields</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Calculated Fields</strong></td>
+                        <td>Basic Calculated field</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>2</td>
+                        <td>34</td>
+                        <td>Order date Timestamp, Max Order Date, color</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Calculated Fields</strong></td>
+                        <td>Level Of Detail</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>1</td>
+                        <td>25</td>
+                        <td>MaxMonth_LastBD, Data Through, p.Max Date Last Year</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 class="section-subtitle">3.3 Dashboard Complexity Breakdown</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature Area</th>
+                        <th>Feature</th>
+                        <th>Complexity</th>
+                        <th>Workbooks Affected</th>
+                        <th>Dashboards Affected</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Actions</strong></td>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>2</td>
+                        <td>6</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dashboards</strong></td>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>2</td>
+                        <td>6</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 4. Detailed Feature Analysis -->
+        <div class="section">
+            <h2 class="section-title">4. Detailed Feature Analysis</h2>
+            
+            <h3 class="section-subtitle">4.1 Visualization Details</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Complexity</th>
+                        <th>Worksheet</th>
+                        <th>Workbook</th>
+                        <th>Dashboards</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank List2deci</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>view</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank List $</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph Comp</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Line Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>3y Graph 2 Comp</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3yTable $</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP Pop Up Y TOP </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles rank (3)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Bar Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Segment</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Data Through</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Var&T20 2</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 55</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>hide</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Line Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>3y Graph 2</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph $ Comp</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 58</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Table $m</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Y Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Day Actual</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph %</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles home (2)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Var&T20</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles rank (4)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>hide 2</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sheet 37</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Table</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YOY Var</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Demand Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Square Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>SubCategory Sales by Day</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>close icon</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP M Pop Up</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3yTable 2</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YTD</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Square Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YTD COLOR</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP Y Pop Up </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP D Pop Up</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph $</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>TOP M</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Info np icon</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Bar Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Region</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Var&T20 $</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>popup background</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YOY Var Excel</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YOY Excel</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 68</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP Pop Up Rank m</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Bar Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>icon np pop up</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank List</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank List $m</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank List%</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles home (3)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Bar Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales (2)</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Financial Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>TOP Y</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 38</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>YOY</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles home (4)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Completion Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP Pop Up M TOP</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph $m Comp</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph % Comp</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Var&T20 %</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>NP Pop Up Rank y</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles rank (2)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Text Table</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>titles home</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Multipolygon</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Rank Map</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>details icon</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Square Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>MTD COLOR</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Patient Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>MTD</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Shape Chart</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Graph $m</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 53</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Table % (2)</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>M Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Pie Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>3y Table %</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Var&T20 $m</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 51</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Automatic</td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Sheet 57</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                    <tr>
+                        <td>Line Chart</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank Graph</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>None</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 class="section-subtitle">4.2 Calculated Field Details</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field Name</th>
+                        <th>Formula</th>
+                        <th>Complexity</th>
+                        <th>Worksheet</th>
+                        <th>Workbook</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Category Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Region</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Region</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Region</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Region</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Segment</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Segment</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Segment</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales By Segment</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Sales by Day</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Sales by Day</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Sales by Day</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Sales by Day</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Profit</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>SubCategory Vs Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Order date Timestamp</td>
+                        <td><span class="formula-text">DATETIME([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales (2)</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Max Order Date</td>
+                        <td><span class="formula-text">MAX([Order_Date])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales (2)</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>color</td>
+                        <td><span class="formula-text">str(MONTH([Order_Date]))+"-"+str(YEAR([Order_Date]))</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales (2)</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>0</td>
+                        <td><span class="formula-text">0</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Yearly Sales (2)</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                    </tr>
+                    <tr>
+                        <td>Doctor FTE/Office</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>%NP Same Day Starts</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>TRUE (copy)</td>
+                        <td><span class="formula-text">TRUE</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>blank number (copy)</td>
+                        <td><span class="formula-text">sum(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>C_Category_SumTotal</td>
+                        <td><span class="formula-text">SUM([NPPerDay_Num])/Sum([NPPerDay_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Empty 4</td>
+                        <td><span class="formula-text">int(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MTD T20% (copy)</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>NP Same Day Starts%</td>
+                        <td><span class="formula-text">sum([NPSameDayStarts_Num])/sum([NPSameDayStarts_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>YTD</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MTD (copy)</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Empty 2</td>
+                        <td><span class="formula-text">int(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Associate Production Per Day</td>
+                        <td><span class="formula-text">sum([AssociateProduction_Num])/sum([AssociateProduction_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Doctor FTE Per OfficeColor Flag</td>
+                        <td><span class="formula-text">INT(if ([Doctor FTE Per Office Den (copy)_929711906805809179] ) >=avg([DoctorFTETop20] )then 2
+else...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Specialty</td>
+                        <td><span class="formula-text">sum([Specialty_Num])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.YOY Header</td>
+                        <td><span class="formula-text">if [Parameters].[Parameter 1] = [FirstOfMonth] and [Parameters].[Parameter 3] = [MtdOrYtdCode] then ...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Assoc Production per Day</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>blank (copy 2)</td>
+                        <td><span class="formula-text">"Show"</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>NP OTC per NP</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Dentures </td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>New Patient Otc</td>
+                        <td><span class="formula-text">sum([NewPatientOtc_Num])/sum([NewPatientOtc_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>YTD T20%</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>NP Tx Accepted Per NP Color Flag</td>
+                        <td><span class="formula-text">INT(if ( [NP Tx Accepted Per NP Den (copy)_929711906806108206] ) >=avg([NPTxAcceptedPerNPTop20] )the...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>EP Treatment Accepted Per EP</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Show Rank</td>
+                        <td><span class="formula-text">IF COUNTD([Facility Code (copy)_1833246535353614354]) = 1 then [Calculation_1990309626125324305]
+EL...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>ComptoProblemFocusedExams</td>
+                        <td><span class="formula-text">sum([ComptoProblemFocusedExams_Num])/sum([ComptoProblemFocusedExams_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>P. CLOSE</td>
+                        <td><span class="formula-text">IF [Parameters].[Parameter 9] = 'Hide' THEN TRUE ELSE FALSE END</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MaxMonth_LastBD</td>
+                        <td><span class="formula-text">{ FIXED : MAX([FirstOfMonth_LastBD])}</span></td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Key 1</td>
+                        <td><span class="formula-text">FLOAT("Yesterday")</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.Metrics List YOY ($M)</td>
+                        <td><span class="formula-text">IF [Calculation_1990309625761050636] >= 200000 THEN [Calculation_1990309625761050636] END</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Net Promoter Score ALL</td>
+                        <td><span class="formula-text">sum([NetPromoterScoreALL_Num])/sum([NetPromoterScoreALL_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Existing Patients Per Day</td>
+                        <td><span class="formula-text">SUM([ExistingPatientsPerDay_Num])/sum([ExistingPatientsPerDay_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>blank</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Percent Of Schedule Color Flag</td>
+                        <td><span class="formula-text">INT(if ( [Percent Of Schedule Den (copy)_929711906806218808]) >=avg([PercentOfScheduleTop20] )then 2...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.show hide</td>
+                        <td><span class="formula-text">if [Calculation_119908351402987520] = [Calculation_1990309626125324305] then [Calculation_1990309626...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MCD Production Per Day</td>
+                        <td><span class="formula-text">sum([MCDProduction_Num])/sum([MCDProduction_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MCD Production Per DayColor Flag</td>
+                        <td><span class="formula-text">INT(if ([MCD Production Per Day Den (copy)_929711906805960742] ) >=avg([MCDProductionTop20] )then 2...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Hygiene </td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Implants</td>
+                        <td><span class="formula-text">sum([Implants_Num])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>DentistryColor Flag</td>
+                        <td><span class="formula-text">INT(if (SUM([Dentistry_Num])/SUM([Dentistry_Den] ) >=AVG( [DentistryTop20]))then 2
+elseif (SUM([Den...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Empty12</td>
+                        <td><span class="formula-text">int(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Dentistry</td>
+                        <td><span class="formula-text">sum([Dentistry_Num])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>DenturesColor Flag</td>
+                        <td><span class="formula-text">INT(if  SUM([Dentures_Num])/SUM([Dentures_Den]) >AVG( [DenturesTop20])then 2
+elseif ([Dentures Den ...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Orthodontics </td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>filter aggregation2</td>
+                        <td><span class="formula-text">[Parameters].[Parameter 6] = [AGGREGATION]</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>MTD</td>
+                        <td><span class="formula-text">""</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Crown & Bridge </td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.YOY Header Metrics Homepage</td>
+                        <td><span class="formula-text">if [Parameters].[Parameter 1] = [FirstOfMonth] and [Parameters].[Parameter 3] = [MtdOrYtdCode] then ...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Graph filter (%)  (copy)</td>
+                        <td><span class="formula-text">if [Parameters].[Select Metric     (copy)_1176846891754504196] IN ('Avg. NP Show Rate Rank'  ,'Avg. ...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Data Through</td>
+                        <td><span class="formula-text">'Data Through '+STR(MONTH({ FIXED : MAX([LastDay])}))+'/'+STR(DAY({ FIXED : MAX([LastDay])}))+'/'+ST...</span></td>
+                        <td><span class="complexity-badge complexity-medium">Medium</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Empty13</td>
+                        <td><span class="formula-text">int(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.Office Group</td>
+                        <td><span class="formula-text">if  [Parameters].[Parameter 5] = [Mature] then "1"
+else  "0" END</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Empty 8</td>
+                        <td><span class="formula-text">int(null)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.Metrics List YOY TOP</td>
+                        <td><span class="formula-text">case [Parameters].[Parameter 4] 
+WHEN 'NP Per Day' then [NPPerDayTop20]
+when 'Existing Patients Pe...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Facility Code/Name dnu</td>
+                        <td><span class="formula-text">[FacilityName]+" - "+[FacilityCode]</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>p.Metrics List YOY TOP ($)</td>
+                        <td><span class="formula-text">IF [p.Mertics List YOY (copy)_1990309625774809102] <= 1000 THEN [p.Mertics List YOY (copy)_199030962...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Crown & Bridge</td>
+                        <td><span class="formula-text">sum([CrownBridge_Num])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Hygiene</td>
+                        <td><span class="formula-text">sum([Hygiene_Num])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>EP Tx Presented Per EP Color Flag</td>
+                        <td><span class="formula-text">INT(if ([EP Tx Presented Per EP Den (copy)_929711906805837854]) >=avg([EPTxPresentedPerEPTop20] )the...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Percent Credit Applications With Tx Over $500Color Flag</td>
+                        <td><span class="formula-text">INT(if ( [Percent Credit Applications With Tx Over $500 Den (copy)_929711906806194230]) >avg( [Credi...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Prod. Added to Schedule</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Graph filter (%)  Comp</td>
+                        <td><span class="formula-text">if [Parameters].[Select Metric     (copy)_188025298506096641] IN ('NP Show Rate'  ,'EP Show Rate','N...</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>NP Treatment Accepted Per NP</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Percent of Balance Collected</td>
+                        <td><span class="formula-text">sum([PercentofBalanceCollected_Num])/sum([PercentofBalanceCollected_Den])</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                    <tr>
+                        <td>Avg. EP Per Day</td>
+                        <td><span class="formula-text">Min(0)</span></td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Acceptance Info</td>
+                        <td>MetricsHomepageNPPopup</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 class="section-subtitle">4.3 Dashboard Details</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Complexity</th>
+                        <th>Dashboard</th>
+                        <th>Workbook</th>
+                        <th>Component Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>36</td>
+                    </tr>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>40</td>
+                    </tr>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>116</td>
+                    </tr>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>36</td>
+                    </tr>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>Sales Summary</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>14</td>
+                    </tr>
+                    <tr>
+                        <td>Multi Tile dashboard</td>
+                        <td><span class="complexity-badge complexity-high">High</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>40</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Rank</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metrics Homepage</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>YOY Report</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Sales Summary</td>
+                        <td>SalesSummary_final_17594712638560</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric - Three Year Time Series</td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                    <tr>
+                        <td>On-Select</td>
+                        <td><span class="complexity-badge complexity-low">Low</span></td>
+                        <td>Metric Comparison - Three Year Time Series </td>
+                        <td>MetricsHomepageNPPopup</td>
+                        <td>N/A</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="report-footer">
+            <div class="footer-text">
+                Generated by Tableau to Looker Migration Assessment Tool | SquareShift
+            </div>
+        </div>
+    </div>
+</body>
+</html>

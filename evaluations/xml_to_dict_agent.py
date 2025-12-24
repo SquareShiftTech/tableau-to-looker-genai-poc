@@ -428,8 +428,12 @@ class AgentState(TypedDict):
 # INGESTION AGENT
 # ============================================================================
 
-def create_ingestion_agent():
-    """Create LangGraph agent for ingestion."""
+def create_ingestion_agent(include_complexity_analysis: bool = False):
+    """Create LangGraph agent for ingestion.
+    
+    Args:
+        include_complexity_analysis: If True, include complexity analysis tools
+    """
     
     llm = ChatVertexAI(model="gemini-2.0-flash-001", temperature=0)
     
@@ -442,16 +446,38 @@ def create_ingestion_agent():
         truncate_all_tables
     ]
     
+    # Optionally add complexity analysis tools
+    if include_complexity_analysis:
+        from evaluations.complexity_analysis_agent import (
+            analyze_visualization_complexity,
+            analyze_calculated_field_complexity,
+            analyze_dashboard_complexity
+        )
+        tools.extend([
+            analyze_visualization_complexity,
+            analyze_calculated_field_complexity,
+            analyze_dashboard_complexity
+        ])
+    
     llm_with_tools = llm.bind_tools(tools)
     
     def agent_node(state: AgentState):
         """Agent decides what to do next."""
-        system = SystemMessage(content="""You are a Tableau ingestion agent. Your job is to:
+        system_content = """You are a Tableau ingestion agent. Your job is to:
 1. Initialize the database (if needed)
 2. List and convert XML files to JSON
 3. Store raw JSON in PostgreSQL
 4. Ingest data into relational tables
-5. Report final counts
+5. Report final counts"""
+        
+        if include_complexity_analysis:
+            system_content += """
+6. After ingestion, analyze complexity:
+   - analyze_visualization_complexity: Analyze chart/viz complexity
+   - analyze_calculated_field_complexity: Analyze calculated field complexity
+   - analyze_dashboard_complexity: Analyze dashboard complexity"""
+        
+        system_content += """
 
 Available tools:
 - initialize_database: Create tables
@@ -459,9 +485,19 @@ Available tools:
 - convert_and_store_files: Convert XML to JSON and store
 - ingest_to_tables: Populate relational tables from raw JSON
 - get_table_counts: Show how many rows in each table
-- truncate_all_tables: Clear all data (use with --fresh)
+- truncate_all_tables: Clear all data (use with --fresh)"""
+        
+        if include_complexity_analysis:
+            system_content += """
+- analyze_visualization_complexity: Analyze visualization complexity
+- analyze_calculated_field_complexity: Analyze calculated field complexity
+- analyze_dashboard_complexity: Analyze dashboard complexity"""
+        
+        system_content += """
 
-Execute the full ingestion pipeline step by step.""")
+Execute the full pipeline step by step."""
+        
+        system = SystemMessage(content=system_content)
         
         response = llm_with_tools.invoke([system] + state["messages"])
         return {"messages": [response]}
@@ -527,6 +563,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--fresh', action='store_true', help='Truncate all tables before ingestion')
     parser.add_argument('--query', action='store_true', help='Start query mode')
+    parser.add_argument('--complexity', action='store_true', help='Include complexity analysis after ingestion')
     args = parser.parse_args()
     query = True
     
@@ -551,14 +588,19 @@ def main():
         # Ingestion mode
         print("=" * 60)
         print("📁 Tableau Ingestion Agent")
+        if args.complexity:
+            print("   (with Complexity Analysis)")
         print("=" * 60)
         
-        agent = create_ingestion_agent()
+        agent = create_ingestion_agent(include_complexity_analysis=args.complexity)
         
         if args.fresh:
             initial_message = "Start fresh ingestion: truncate all tables, then initialize database, convert files, ingest to tables, and show final counts."
         else:
             initial_message = "Run ingestion: initialize database if needed, convert any new files, ingest to tables, and show final counts."
+        
+        if args.complexity:
+            initial_message += " After ingestion is complete, run complexity analysis on all visualizations, calculated fields, and dashboards."
         
         result = agent.invoke({
             "messages": [HumanMessage(content=initial_message)]

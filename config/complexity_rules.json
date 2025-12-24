@@ -1,0 +1,73 @@
+{
+  "tableau": {
+    "visualizations": {
+      "low": {
+        "mark_classes": ["bar", "line", "pie", "text"],
+        "indicators": ["single_axis", "basic_encoding"],
+        "description": "Simple chart types with basic encoding"
+      },
+      "medium": {
+        "mark_classes": ["square", "circle", "shape", "map"],
+        "indicators": ["dual_axis", "multiple_datasources", "custom_formatting"],
+        "description": "Advanced charts or charts with dual-axis/complex encoding"
+      },
+      "high": {
+        "mark_classes": ["gantt"],
+        "indicators": ["custom_marks", "complex_encoding", "table_calculations"],
+        "description": "Complex chart types requiring custom implementation"
+      }
+    },
+    "calculated_fields": {
+      "low": {
+        "patterns": ["basic_arithmetic", "simple_aggregation"],
+        "regex": ["^SUM\\(|^AVG\\(|^COUNT\\(|^MIN\\(|^MAX\\("],
+        "examples": ["SUM([Sales])", "[Profit] / [Sales]"],
+        "description": "Simple arithmetic or basic aggregations"
+      },
+      "medium": {
+        "patterns": ["date_functions", "string_operations", "simple_lod", "table_calculations"],
+        "regex": ["DATETRUNC|DATEDIFF|DATEADD|LEFT|RIGHT|CONTAINS|REPLACE|\\{FIXED[^},]*:[^}]*\\}"],
+        "examples": ["DATETRUNC('month', [Date])", "{FIXED [Region] : SUM([Sales])}", "{FIXED[Region]:SUM([Sales])}"],
+        "description": "Date/string functions, simple LODs (single dimension FIXED), table calculations"
+      },
+      "high": {
+        "patterns": ["complex_lod", "window_functions", "nested_calculations"],
+        "regex": ["WINDOW_|RUNNING_|RANK_|\\{FIXED.*:.*\\{FIXED|\\{INCLUDE|\\{EXCLUDE|\\{FIXED[^}]*,[^}]*:"],
+        "examples": ["WINDOW_AVG([Sales], -6, 0)", "{FIXED [Region], [Category] : SUM([Sales])}", "{FIXED[Region],[Category]:SUM([Sales])}", "{INCLUDE [Category] : SUM([Sales])}", "{EXCLUDE [Region] : SUM([Sales])}"],
+        "description": "Complex LODs (multi-dimension FIXED, INCLUDE, EXCLUDE, nested), window functions, nested calculations"
+      }
+    },
+    "dashboards": {
+      "low": {
+        "component_count_max": 1,
+        "indicators": ["basic_filters", "data_labels", "single_worksheet"],
+        "description": "Simple dashboards with minimal components"
+      },
+      "medium": {
+        "component_count_min": 2,
+        "component_count_max": 5,
+        "indicators": ["tooltips", "group_features", "detail_views", "multiple_worksheets"],
+        "description": "Dashboards with moderate complexity"
+      },
+      "high": {
+        "component_count_min": 6,
+        "indicators": ["cross_filtering", "hierarchy", "top_n", "highlight_actions", "multi_tile"],
+        "description": "Complex dashboards with many components and advanced features"
+      }
+    },
+    "actions": {
+      "low": {
+        "action_types": ["url"],
+        "description": "Simple URL actions"
+      },
+      "medium": {
+        "action_types": ["filter", "highlight"],
+        "description": "Filter and highlight actions"
+      },
+      "high": {
+        "action_types": ["cross_filter", "set_action", "parameter_action"],
+        "description": "Complex cross-filtering and set/parameter actions"
+      }
+    }
+  }
+}

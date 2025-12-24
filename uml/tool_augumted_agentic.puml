@@ -1,0 +1,80 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_TOP_DOWN()
+SHOW_LEGEND()
+
+skinparam linetype ortho
+skinparam nodesep 50
+skinparam ranksep 80
+
+title Tool-Augmented Agentic Workflow
+
+Container_Boundary(agent_system, "Agent System") {
+    
+    Component(orchestrator, "Agent Orchestrator", "LangGraph", "Coordinates tool-augmented workflow")
+    
+    ' Step 1: Conversion Tools
+    Component(xml_json_tool, "XML → JSON", "@tool (Python)", "Deterministic conversion")
+    Component(json_schema_tool, "JSON → Schema", "@tool (Python)", "Auto-generate schema")
+    
+    ' Step 2: Storage Tool
+    Component(store_json_tool, "Store JSON", "@tool", "Persist raw JSON")
+    
+    ' Step 3: Data Model (One-time GenAI)
+    Component(data_model, "Data Model Design", "GenAI (One-time)", "Design relational schema")
+    Component(create_model_tool, "Create Tables", "@tool", "Create if not exists")
+    
+    ' Step 4: Pipeline Tool
+    Component(pipeline_tool, "ETL Pipeline", "@tool", "Parse JSON → Relational tables")
+    
+    ' Step 5: Analysis Agents (SQL-based)
+    Component(analysis_agent, "Analysis Agent", "LLM + SQL", "Query & analyze via SQL")
+    Component(strategy_agent, "Strategy Agent", "LLM", "Aggregate & recommend")
+}
+
+' External storage
+ComponentDb(gcs_files, "Source Files", "GCS", "Tableau XML files")
+ComponentDb(postgres_json, "JSON Store", "PostgreSQL", "Raw JSON data")
+ComponentDb(postgres_rel, "Relational Tables", "PostgreSQL", "Structured data model")
+ComponentDb(results, "Results", "PostgreSQL/BigQuery", "Final analysis")
+
+' Orchestrator triggers all tools
+Rel_Down(orchestrator, xml_json_tool, "1. Trigger")
+Rel_Down(orchestrator, json_schema_tool, "2. Trigger")
+Rel_Down(orchestrator, store_json_tool, "3. Trigger")
+Rel_Down(orchestrator, create_model_tool, "4. Trigger")
+Rel_Down(orchestrator, pipeline_tool, "5. Trigger")
+Rel_Down(orchestrator, analysis_agent, "6. Trigger")
+Rel_Down(orchestrator, strategy_agent, "7. Trigger")
+
+' Tool flows
+Rel(xml_json_tool, gcs_files, "Read XML")
+Rel(xml_json_tool, json_schema_tool, "JSON output")
+
+Rel(json_schema_tool, store_json_tool, "JSON + Schema")
+
+Rel(store_json_tool, postgres_json, "Write JSON")
+
+Rel(data_model, create_model_tool, "Schema definition")
+Rel(create_model_tool, postgres_rel, "Create tables")
+
+Rel(pipeline_tool, postgres_json, "Read JSON")
+Rel(pipeline_tool, postgres_rel, "Write to tables")
+
+' Analysis flows
+Rel(analysis_agent, postgres_rel, "SQL queries")
+Rel(analysis_agent, results, "Write analysis")
+
+Rel(strategy_agent, results, "Read all")
+Rel(strategy_agent, results, "Write final report")
+
+' Layout hints
+xml_json_tool -[hidden]-> json_schema_tool
+json_schema_tool -[hidden]-> store_json_tool
+store_json_tool -[hidden]-> create_model_tool
+create_model_tool -[hidden]-> pipeline_tool
+pipeline_tool -[hidden]-> analysis_agent
+analysis_agent -[hidden]-> strategy_agent
+
+@enduml
